@@ -7,8 +7,7 @@ import select from "@inquirer/select";
 import type { ProviderService } from "@/services/providerService.js";
 import type { StateService } from "@/system/stateService.js";
 import type { Provider } from "@/system/types.js";
-
-const STATE_KEY_SELECTED_PROVIDER_ID = "selectedProviderId";
+import { SELECTED_PROVIDER_ID_KEY } from "@/system/types.js";
 
 export async function handleSelectProvider(
   providerService: ProviderService,
@@ -31,7 +30,7 @@ export async function handleSelectProvider(
   });
 
   stateService.setState((state) => {
-    state[STATE_KEY_SELECTED_PROVIDER_ID] = selectedId;
+    state[SELECTED_PROVIDER_ID_KEY] = selectedId;
   });
   console.log(`Provider "${selectedId}" is now selected.`);
 }

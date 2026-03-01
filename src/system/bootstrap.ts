@@ -1,18 +1,20 @@
 /**
- * System bootstrap: config, state, provider check, and context for CLI.
+ * System bootstrap: config, state, provider check, agent (with allowlist middleware and in-memory checkpointer), and context for CLI.
  * If no providers exist, runs add-provider workflow; if user does not complete, exits.
  */
 
 import { ConfigService } from "./configService.js";
 import { StateService } from "./stateService.js";
 import { ProviderService } from "@/services/providerService.js";
+import { createAllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
+import { createAgent } from "@/agent/agent.js";
+import type { DiskCleanupAgent } from "@/agent/agent.js";
 
 export interface BootstrapContext {
   configService: ConfigService;
   stateService: StateService;
   providerService: ProviderService;
-  /** Placeholder for future agent lifecycle */
-  agent: null;
+  agent: DiskCleanupAgent;
 }
 
 export type RunAddProviderWorkflow = (providerService: ProviderService) => Promise<boolean>;
@@ -50,10 +52,17 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     }
   }
 
+  const allowlistMiddleware = createAllowlistMiddleware(stateService);
+  const agent = createAgent({
+    stateService,
+    providerService,
+    allowlistMiddleware,
+  });
+
   return {
     configService,
     stateService,
     providerService,
-    agent: null,
+    agent,
   };
 }
