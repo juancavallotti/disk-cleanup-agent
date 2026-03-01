@@ -3,17 +3,25 @@ import { parseLine } from "./repl.js";
 
 describe("parseLine", () => {
   it("splits command and args", () => {
-    expect(parseLine("list-providers")).toEqual({
-      command: "list-providers",
+    expect(parseLine("help")).toEqual({
+      command: "help",
       args: [],
     });
-    expect(parseLine("delete-provider openai-1")).toEqual({
-      command: "delete-provider",
-      args: ["openai-1"],
+    expect(parseLine("provider list")).toEqual({
+      command: "provider",
+      args: ["list"],
     });
-    expect(parseLine("  add-provider   ")).toEqual({
-      command: "add-provider",
-      args: [],
+    expect(parseLine("provider delete openai-1")).toEqual({
+      command: "provider",
+      args: ["delete", "openai-1"],
+    });
+    expect(parseLine("  provider add   ")).toEqual({
+      command: "provider",
+      args: ["add"],
+    });
+    expect(parseLine("provider select")).toEqual({
+      command: "provider",
+      args: ["select"],
     });
   });
 });
