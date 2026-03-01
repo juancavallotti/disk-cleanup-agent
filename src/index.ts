@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
-import { registerSkills } from "@/skills/index.js";
+import { bootstrap } from "@/system/bootstrap.js";
+import { runAddProviderWorkflow } from "@/cli/addProviderWorkflow.js";
+import { startRepl } from "@/cli/repl.js";
 
-const program = new Command();
+const APP_NAME = "disk-cleanup";
 
-program
-  .name("disk-cleanup")
-  .description("CLI app with LangChain and OpenAI — skills-based")
-  .version("0.1.0");
+async function main(): Promise<void> {
+  const context = await bootstrap({
+    appName: APP_NAME,
+    runAddProviderWorkflow: (providerService) =>
+      runAddProviderWorkflow({ providerService }),
+  });
+  startRepl(context);
+}
 
-// Register all skills (commands) from the skills module
-registerSkills(program);
-
-program.parse();
+main();
