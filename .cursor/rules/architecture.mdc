@@ -1,0 +1,38 @@
+---
+description: Layered architecture: entry → system → CLI, services, agent/tools
+alwaysApply: true
+---
+
+# Architecture
+
+## Entry point
+
+- Single main file (`src/index.js`): bootstraps the system layer once, then registers and runs the CLI. Does not instantiate services or agent directly. App name is a build-time parameter passed into the system.
+
+## Directory layout
+
+- `src/system/` — Configuration service, state service; bootstraps agent; wires tools to services; exposes bootstrapped context for the CLI.
+- `src/cli/` — Commander commands; receives bootstrapped agent/services from system; uses state service for prefs (never touches state file directly).
+- `src/services/` — Domain/business logic; instantiated by system; may be passed into tools.
+- `src/agent/` — Agent + `src/agent/tools/`; agent and tools created/wired by the system layer.
+
+## State
+
+- Maintained by **state service** in the system layer. App name is a build-time parameter injected into the state service. Path: `~/.<appName>/state.json`. Only the state service reads/writes the file; CLI uses the state service.
+
+## System services
+
+- **Configuration service**: build-time config (e.g. app name).
+- **State service**: owns state file; receives app name via injection.
+
+## Data flow
+
+- Entry → System (bootstrap, inject app name) → CLI uses system's agent/services/state. System wires Tools → Services. No CLI → direct file or service construction.
+
+## Testing
+
+- Unit tests (2–3 cases) for: services, CLI, system, tools. No unit tests for the agent. Tools must be tested to verify behavior.
+
+## Conventions
+
+- One Commander command per file under `cli/`; one tool per file under `agent/tools/`. System layer owns all wiring. State and config are system-layer concerns.

@@ -1,0 +1,11 @@
+---
+description: State service and state file conventions
+globs: "**/system/**/*state*.js,**/services/**/*state*.js"
+alwaysApply: false
+---
+
+# State and prefs
+
+- State is owned by the state service. Path: `~/.<appName>/state.json` (app name injected at build).
+- Use `os.homedir()` for `~`. Create directory if missing. Persist valid JSON. No secrets in state.
+- CLI and other layers use the state service only; they do not read or write the state file directly.
