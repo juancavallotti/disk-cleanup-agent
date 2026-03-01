@@ -4,11 +4,11 @@
  * LangSmith: LANGCHAIN_TRACING_V2=true, LANGCHAIN_API_KEY, LANGCHAIN_PROJECT.
  */
 
-function getOpenAIKey() {
-  return process.env.OPENAI_API_KEY || process.env.OPENAI_TOKEN;
+function getOpenAIKey(): string | undefined {
+  return process.env.OPENAI_API_KEY ?? process.env.OPENAI_TOKEN;
 }
 
-export async function getChatModel(options = {}) {
+export async function getChatModel(options: Record<string, unknown> = {}) {
   const apiKey = getOpenAIKey();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY or OPENAI_TOKEN is not set. Add one to .env or your environment.");

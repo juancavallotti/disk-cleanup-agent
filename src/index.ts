@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { registerSkills } from "./skills/index.js";
+import { registerSkills } from "@/skills/index.js";
 
 const program = new Command();
 

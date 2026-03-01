@@ -3,11 +3,11 @@
  * Set OPENAI_API_KEY or OPENAI_TOKEN in .env or environment.
  */
 
-function getOpenAIKey() {
-  return process.env.OPENAI_API_KEY || process.env.OPENAI_TOKEN;
+function getOpenAIKey(): string | undefined {
+  return process.env.OPENAI_API_KEY ?? process.env.OPENAI_TOKEN;
 }
 
-export async function getOpenAIClient() {
+export async function getOpenAIClient(): Promise<import("openai").OpenAI> {
   const apiKey = getOpenAIKey();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY or OPENAI_TOKEN is not set. Add one to .env or your environment.");
