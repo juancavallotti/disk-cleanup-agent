@@ -59,6 +59,9 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     allowlistMiddleware,
   });
 
+  const selected = agent.getProvider();
+  console.log(`Selected provider: ${selected.id} (${selected.type})`);
+
   return {
     configService,
     stateService,
