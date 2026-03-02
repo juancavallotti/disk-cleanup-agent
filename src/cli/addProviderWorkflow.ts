@@ -79,13 +79,6 @@ async function runAddProviderWorkflowInner(providerService: ProviderService): Pr
   const { apiKeyUrl, name } = PROVIDER_META[type];
   console.log(`\nGet your ${name} API key at: ${apiKeyUrl}\n`);
   process.stdout.write("\n\n");
-  const idAnswer = await input({
-    message: "Provider id (optional, press Enter to auto-generate)",
-    default: "",
-  });
-  if (isQuitInput(idAnswer)) return false;
-
-  process.stdout.write("\n\n");
   const apiKeyAnswer = await input({
     message: "API key",
     validate: (value) =>
@@ -96,6 +89,13 @@ async function runAddProviderWorkflowInner(providerService: ProviderService): Pr
     console.error("API key is required.");
     return false;
   }
+
+  process.stdout.write("\n\n");
+  const idAnswer = await input({
+    message: "Provider id (optional, press Enter to auto-generate)",
+    default: "",
+  });
+  if (isQuitInput(idAnswer)) return false;
 
   try {
     providerService.addProvider({
