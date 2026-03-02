@@ -23,7 +23,7 @@ Provider commands:
   provider add         Add a model provider (OpenAI or Anthropic)
   provider list        List configured providers
   provider select      Select the provider to use (interactive)
-  provider delete <id> Remove a provider by id
+  provider delete [id] Remove a provider (interactive if no id)
 `;
 
 function isQuit(input: string): boolean {
@@ -120,7 +120,12 @@ export function startRepl(context: BootstrapContext): void {
               rl.resume();
             }
           } else if (sub === "delete") {
-            handleDeleteProvider(context.providerService, args[1] ?? "");
+            rl.pause();
+            try {
+              await handleDeleteProvider(context, args[1] ?? "");
+            } finally {
+              rl.resume();
+            }
           } else if (sub) {
             console.log("Unknown provider command. Type 'provider' for available commands.");
           } else {

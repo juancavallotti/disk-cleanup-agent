@@ -18,7 +18,7 @@ const PROVIDER_HELP_LINES = `
   provider add       Add a model provider (OpenAI or Anthropic)
   provider list      List configured providers
   provider select    Select the provider to use (interactive)
-  provider delete <id>  Remove a provider by id
+  provider delete [id]  Remove a provider (interactive if no id)
 `.trim();
 
 /**

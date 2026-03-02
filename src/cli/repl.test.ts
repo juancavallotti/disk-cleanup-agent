@@ -23,5 +23,9 @@ describe("parseLine", () => {
       command: "provider",
       args: ["select"],
     });
+    expect(parseLine("provider delete")).toEqual({
+      command: "provider",
+      args: ["delete"],
+    });
   });
 });

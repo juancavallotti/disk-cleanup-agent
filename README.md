@@ -93,7 +93,7 @@ Running the app **without** a `cleanup` subcommand starts an interactive REPL. Y
 | `provider add` | Add a model provider (OpenAI or Anthropic). |
 | `provider list` | List configured providers. |
 | `provider select` | Interactively select which provider to use. |
-| `provider delete <id>` | Remove a provider by id. |
+| `provider delete [id]` | Remove a provider; interactive pick if no id given. |
 | `cleanup report` | Same as CLI: generate a cleanup report. |
 | `cleanup script` | Same as CLI: generate a cleanup script from a report. |
 | `cleanup view` | Same as CLI: view a saved report. |
