@@ -60,7 +60,6 @@ Runs `node dist/index.js` with the same md loader. Use this after `npm run build
 ```bash
 npm run build
 npm link
-disk-cleanup --help
 ```
 
 Then run `disk-cleanup` from any directory.
@@ -70,11 +69,6 @@ Then run `disk-cleanup` from any directory.
 ### CLI (direct)
 
 When you pass a subcommand, the app runs that command and exits:
-
-```bash
-disk-cleanup --help              # Show main help
-disk-cleanup cleanup --help      # Show cleanup subcommands
-```
 
 | Command | Description |
 |--------|-------------|
