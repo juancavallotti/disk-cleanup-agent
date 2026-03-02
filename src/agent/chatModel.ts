@@ -8,7 +8,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import type { Provider, ProviderType } from "@/system/types.js";
 
 const DEFAULT_MODEL: Record<ProviderType, string> = {
-  openai: "gpt-4o-mini",
+  openai: "gpt-5-mini",
   anthropic: "claude-3-5-haiku-20241022",
 };
 
@@ -37,9 +37,10 @@ export function createChatModelFromProvider(provider: Provider): BaseChatModel {
   switch (provider.type) {
     case "openai": {
       const apiKey = resolveOpenAIKey(provider);
+      const isGpt5 = /^gpt-5/i.test(modelId);
       return new ChatOpenAI({
         model: modelId,
-        temperature: 0.7,
+        ...(isGpt5 ? {} : { temperature: 0.7 }),
         openAIApiKey: apiKey,
       });
     }

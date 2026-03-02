@@ -1,13 +1,15 @@
 /**
  * cleanup report — run agent with streaming, write YAML report to app reports dir.
- * Flow: get execution plan from LLM (no tools) → show as bullet points → user accepts via queue → run agent with coordinator (thinking stream + user input queue).
+ * Flow: run agent graph for plan (same agent, shared context) → show plan → user accepts → run same graph with execution message (shared context).
  */
 
 import { HumanMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import type { BootstrapContext } from "@/system/bootstrap.js";
 import {
   runStreamTask,
   runCoordinatorLoop,
+  consumeStreamWithTwoLines,
   type StreamSharedState,
 } from "./streamDisplay.js";
 import type { ReportAccumulator } from "@/agent/tools/reportCleanupOpportunity.js";
@@ -38,18 +40,23 @@ function formatPlanAsBullets(text: string): string {
     .join("\n");
 }
 
-/** Fetch execution plan from LLM (no tools). Returns plan text. */
-async function fetchExecutionPlan(agent: BootstrapContext["agent"]): Promise<string> {
-  const model = agent.getChatModel();
-  const response = await model.invoke([new HumanMessage(PLAN_PROMPT)]);
-  const content = response.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => (typeof block === "string" ? block : (block as { text?: string }).text ?? ""))
-      .join("\n");
+/** Extract plan text from the last AI message in the conversation. */
+function getPlanTextFromMessages(messages: BaseMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    const type = (m as { _getType?: () => string })._getType?.() ?? (m as { type?: string }).type;
+    if (type === "ai") {
+      const content = (m as { content?: unknown }).content;
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        return content
+          .map((block) => (typeof block === "string" ? block : (block as { text?: string }).text ?? ""))
+          .join("\n");
+      }
+      return String(content ?? "");
+    }
   }
-  return String(content);
+  return "";
 }
 
 export async function runCleanupReport(context: BootstrapContext): Promise<void> {
@@ -69,9 +76,17 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   };
 
   console.log("\nGenerating execution plan...\n");
-  const rawPlan = await fetchExecutionPlan(agent);
+
+  const graph = agent.getGraph(accumulator);
+  const planStream = await graph.stream(
+    { messages: [new HumanMessage(PLAN_PROMPT)] },
+    { streamMode: "values" }
+  );
+  const planResult = await consumeStreamWithTwoLines(planStream);
+  const planPhaseMessages = planResult.messages;
+  const rawPlan = getPlanTextFromMessages(planPhaseMessages);
   const planBullets = formatPlanAsBullets(rawPlan);
-  console.log("Execution plan:\n");
+  console.log("\nExecution plan:\n");
   console.log(planBullets);
   console.log("");
 
@@ -94,13 +109,13 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     REPORT_TASK;
 
   const sharedState: StreamSharedState = { lastChunk: null, toolProgress: null, done: false };
-  const graph = agent.getGraph(accumulator, {
+  const executionGraph = agent.getGraph(accumulator, {
     thinkingStreamWriter: (text) => {
       sharedState.toolProgress = text;
     },
   });
-  const stream = await graph.stream(
-    { messages: [new HumanMessage(executionMessage)] },
+  const stream = await executionGraph.stream(
+    { messages: [...planPhaseMessages, new HumanMessage(executionMessage)] },
     { streamMode: "values" }
   );
 
