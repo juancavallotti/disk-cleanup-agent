@@ -1,9 +1,9 @@
 export { getSystemTypeTool } from "./getSystemType.js";
 export { getCurrentUsernameTool } from "./getCurrentUsername.js";
 export { getSkillTool } from "./getSkill.js";
-export { getCommonOffenderPathsTool } from "./getCommonOffenderPaths.js";
 export { createCommandProbeTool } from "./commandProbe.js";
 export { createListFoldersTool } from "./listFolders.js";
+export { createListFoldersBatchTool } from "./listFoldersBatch.js";
 export { createListFolderContentsBySizeTool } from "./listFolderContentsBySize.js";
 export { createChangeDirectoryTool } from "./changeDirectory.js";
 export { createGetFolderCapacityTool } from "./getFolderCapacity.js";

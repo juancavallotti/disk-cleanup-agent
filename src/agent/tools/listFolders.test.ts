@@ -12,6 +12,8 @@ describe("createListFoldersTool", () => {
     const out = await tool.invoke({ path: dir });
     expect(out).toContain("a.txt");
     expect(out).toContain("file");
+    // Third column should be read/write permissions.
+    expect(out).toMatch(/a\.txt\tfile\t(rw|r-|-w|--)/);
   });
 
   it("rejects system path on darwin", async () => {

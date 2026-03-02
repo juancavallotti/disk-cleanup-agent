@@ -10,11 +10,11 @@ import { TOOL_ALLOWLIST_KEY, TOOL_ALLOWED_ARGS_KEY } from "@/system/types.js";
 /** Single source of truth for which tools participate in allowlist behavior. Skills (get_skill) are always allowed and not listed here. */
 export const ALLOWLIST_TOOL_NAMES = [
   "list_folders",
+  "list_folders_batch",
   "list_folder_contents_by_size",
   "change_directory",
   "get_folder_capacity",
   "get_folder_capacity_batch",
-  "get_common_offender_paths",
   "command_probe",
   "submit_cleanup_script",
 ] as const;
