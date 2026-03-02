@@ -1,5 +1,5 @@
 /**
- * Single-line stream display: one line, max 50 chars, updated in place with \r.
+ * Single-line stream display: one line, max 400 chars, updated in place with \r.
  * Handles SIGINT to abort and restore terminal.
  * Coordinator loop alternates between showing the line and draining the user input queue.
  */
@@ -13,12 +13,12 @@ const CLEAR_LINE = "\r\x1b[K";
 const COORDINATOR_POLL_MS = 50;
 
 /** Max characters shown for the in-place streamed token line. */
-export const STREAM_DISPLAY_MAX_CHARS = 50;
+export const STREAM_DISPLAY_MAX_CHARS = 400;
 
 /** Shared state between stream task and coordinator: latest chunk, optional tool progress, and stream completion. */
 export interface StreamSharedState {
   lastChunk: { messages: BaseMessage[] } | null;
-  /** When set by a running tool, the coordinator shows this on the single stream line (max 50 chars). Cleared when a new chunk arrives. */
+  /** When set by a running tool, the coordinator shows this on the single stream line (max 400 chars). Cleared when a new chunk arrives. */
   toolProgress: string | null;
   done: boolean;
   aborted?: boolean;

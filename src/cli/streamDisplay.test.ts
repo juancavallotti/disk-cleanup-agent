@@ -13,11 +13,11 @@ describe("getStreamLineFromQueue", () => {
   });
 
   it("returns last STREAM_DISPLAY_MAX_CHARS when over max length", () => {
-    const long = "a".repeat(80);
+    const long = "a".repeat(500);
     const queue = [long];
     const result = getStreamLineFromQueue(queue);
     expect(result).toHaveLength(STREAM_DISPLAY_MAX_CHARS);
-    expect(result).toBe("a".repeat(50));
+    expect(result).toBe("a".repeat(STREAM_DISPLAY_MAX_CHARS));
     expect(result).toBe(long.slice(-STREAM_DISPLAY_MAX_CHARS));
   });
 
