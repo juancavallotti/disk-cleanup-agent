@@ -97,6 +97,7 @@ Running the app **without** a `cleanup` subcommand starts an interactive REPL. Y
 | `cleanup report` | Same as CLI: generate a cleanup report. |
 | `cleanup script` | Same as CLI: generate a cleanup script from a report. |
 | `cleanup view` | Same as CLI: view a saved report. |
+| `clear` | Clear the console. |
 | `help` | Show available commands. |
 | `quit`, `exit` | Exit the app. |
 

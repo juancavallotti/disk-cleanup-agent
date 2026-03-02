@@ -59,6 +59,7 @@ export function getReplHelpText(context: BootstrapContext): string {
     "",
     cleanupLines,
     "",
+    "  clear              Clear the console",
     "  help               Show this message",
     "  quit, exit         Exit the app",
   ].join("\n");

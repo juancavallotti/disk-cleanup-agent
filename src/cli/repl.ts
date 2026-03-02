@@ -56,6 +56,9 @@ export function startRepl(context: BootstrapContext): void {
         case "help":
           showHelp(context);
           break;
+        case "clear":
+          console.clear();
+          break;
         case "cleanup": {
           const sub = args[0]?.toLowerCase();
           if (sub === "report") {
