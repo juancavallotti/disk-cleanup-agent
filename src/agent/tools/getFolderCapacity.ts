@@ -7,9 +7,9 @@ import { resolve } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
-import { getFolderCapacitySync } from "./folderSize.js";
+import { getFolderCapacityAsync } from "./folderSize.js";
 
-function getFolderCapacity(path: string, defaultCwd?: string): string {
+async function getFolderCapacity(path: string, defaultCwd?: string): Promise<string> {
   const base = defaultCwd || process.cwd();
   const toResolve = path.trim() ? resolve(base, path) : base;
   const err = assertNotSystemPath(toResolve);
@@ -17,7 +17,7 @@ function getFolderCapacity(path: string, defaultCwd?: string): string {
   try {
     const stat = statSync(toResolve);
     if (!stat.isDirectory()) return `Error: Not a directory: ${toResolve}`;
-    const bytes = getFolderCapacitySync(toResolve);
+    const bytes = await getFolderCapacityAsync(toResolve);
     return String(bytes);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -34,10 +34,10 @@ export interface GetFolderCapacityOptions {
 export function createGetFolderCapacityTool(options: GetFolderCapacityOptions = {}) {
   const { defaultCwd, onProgress } = options;
   return tool(
-    ((input: { path: string }) => {
+    (async (input: { path: string }) => {
       onProgress?.(`Measuring ${input.path || "."}...`);
       return getFolderCapacity(input.path, defaultCwd);
-    }) as (input: unknown) => string,
+    }) as (input: unknown) => Promise<string>,
     {
       name: "get_folder_capacity",
       description: "Get the total size in bytes of a directory (recursive). Give the folder path. Can be slow for large directories. Never use system folders.",

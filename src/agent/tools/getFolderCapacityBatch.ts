@@ -3,13 +3,25 @@
  */
 
 import { statSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, basename } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
-import { getFolderCapacitySync } from "./folderSize.js";
+import { getFolderCapacityAsync } from "./folderSize.js";
 
-function measureOne(path: string, defaultCwd?: string): { path: string; sizeBytes: number; error?: string } {
+/** Truncate path for progress display so it fits ~80-char line (e.g. "Measuring 3/10: .../Cache"). */
+function truncatePathForProgress(path: string, maxLen = 50): string {
+  if (path.length <= maxLen) return path;
+  const name = basename(path);
+  const prefix = ".../";
+  if (prefix.length + name.length <= maxLen) return prefix + name;
+  return prefix + name.slice(-(maxLen - prefix.length));
+}
+
+async function measureOne(
+  path: string,
+  defaultCwd?: string
+): Promise<{ path: string; sizeBytes: number; error?: string }> {
   const base = defaultCwd || process.cwd();
   const toResolve = path.trim() ? resolve(base, path) : base;
   const err = assertNotSystemPath(toResolve);
@@ -17,7 +29,7 @@ function measureOne(path: string, defaultCwd?: string): { path: string; sizeByte
   try {
     const stat = statSync(toResolve);
     if (!stat.isDirectory()) return { path: toResolve, sizeBytes: 0, error: "Not a directory" };
-    const bytes = getFolderCapacitySync(toResolve);
+    const bytes = await getFolderCapacityAsync(toResolve);
     return { path: toResolve, sizeBytes: bytes };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -34,18 +46,19 @@ export interface GetFolderCapacityBatchOptions {
 export function createGetFolderCapacityBatchTool(options: GetFolderCapacityBatchOptions = {}) {
   const { defaultCwd, onProgress } = options;
   return tool(
-    ((input: { paths: string[] }) => {
+    (async (input: { paths: string[] }) => {
       const paths = input.paths ?? [];
       const results: { path: string; sizeBytes: number; error?: string }[] = [];
       for (let i = 0; i < paths.length; i++) {
         if (onProgress) {
-          if (paths.length === 1) onProgress(`Measuring ${paths[i]}...`);
-          else onProgress(`Measuring ${i + 1}/${paths.length}: ${paths[i]}...`);
+          const shortPath = truncatePathForProgress(paths[i]);
+          if (paths.length === 1) onProgress(`Measuring ${shortPath}...`);
+          else onProgress(`Measuring ${i + 1}/${paths.length}: ${shortPath}...`);
         }
-        results.push(measureOne(paths[i], defaultCwd));
+        results.push(await measureOne(paths[i], defaultCwd));
       }
       return JSON.stringify(results, null, 0);
-    }) as (input: unknown) => string,
+    }) as (input: unknown) => Promise<string>,
     {
       name: "get_folder_capacity_batch",
       description: "Get the total size in bytes for multiple directories at once (runs in parallel). Pass an array of folder paths. Use this instead of calling get_folder_capacity many times to save time. Never use system folders.",

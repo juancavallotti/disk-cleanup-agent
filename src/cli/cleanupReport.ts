@@ -108,7 +108,12 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     "Now execute this plan using your tools. " +
     REPORT_TASK;
 
-  const sharedState: StreamSharedState = { lastChunk: null, toolProgress: null, done: false };
+  const sharedState: StreamSharedState = {
+    lastChunk: null,
+    toolProgress: null,
+    done: false,
+    lastChunkTime: Date.now(),
+  };
   const executionGraph = agent.getGraph(accumulator, {
     thinkingStreamWriter: (text) => {
       sharedState.toolProgress = text;
