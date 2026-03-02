@@ -5,7 +5,15 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { AllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
 
-const ALLOWLISTED_TOOL_NAMES = ["list_folders", "change_directory", "get_folder_capacity", "get_folder_capacity_batch"];
+const ALLOWLISTED_TOOL_NAMES = [
+  "list_folders",
+  "list_folder_contents_by_size",
+  "change_directory",
+  "get_folder_capacity",
+  "get_folder_capacity_batch",
+  "get_common_offender_paths",
+  "command_probe",
+];
 
 export function wrapToolWithAllowlist(
   tool: StructuredToolInterface,

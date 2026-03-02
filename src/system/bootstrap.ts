@@ -17,6 +17,8 @@ export interface BootstrapContext {
   stateService: StateService;
   providerService: ProviderService;
   agent: DiskCleanupAgent;
+  /** Recreate the agent so it uses the current selected provider (e.g. after provider select). */
+  recreateAgent(): void;
   /** User input queue for the CLI coordinator; used during cleanup report and other flows that need prompts. */
   userInputQueue: UserInputQueue;
 }
@@ -60,20 +62,32 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
   const allowlistMiddleware = createAllowlistMiddleware(stateService, {
     requestUserInput: (options) => userInputQueue.requestInput(options),
   });
-  const agent = createAgent({
-    stateService,
-    providerService,
-    allowlistMiddleware,
-  });
 
-  const selected = agent.getProvider();
+  const agentRef: { current: DiskCleanupAgent } = {
+    current: createAgent({
+      stateService,
+      providerService,
+      allowlistMiddleware,
+    }),
+  };
+
+  const selected = agentRef.current.getProvider();
   console.log(`Selected provider: ${selected.id} (${selected.type})`);
 
   return {
     configService,
     stateService,
     providerService,
-    agent,
+    get agent(): DiskCleanupAgent {
+      return agentRef.current;
+    },
+    recreateAgent(): void {
+      agentRef.current = createAgent({
+        stateService,
+        providerService,
+        allowlistMiddleware,
+      });
+    },
     userInputQueue,
   };
 }

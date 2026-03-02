@@ -10,12 +10,15 @@ import { createChatModelFromProvider } from "./chatModel.js";
 import { SELECTED_PROVIDER_ID_KEY } from "@/system/types.js";
 import type { Provider } from "@/system/types.js";
 import { createAgent as createLangchainAgent } from "langchain";
+import { tools as anthropicTools } from "@langchain/anthropic";
 import { tools as openAITools } from "@langchain/openai";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { ReportAccumulator } from "./tools/reportCleanupOpportunity.js";
 import {
   getSystemTypeTool,
   getCurrentUsernameTool,
+  getCommonOffenderPathsTool,
+  createCommandProbeTool,
   createListFoldersTool,
   createListFolderContentsBySizeTool,
   createChangeDirectoryTool,
@@ -36,19 +39,34 @@ const WEB_SEARCH_DOMAINS = [
   "github.com",
 ];
 
+/** Domains Anthropic's web search crawler cannot access; excluded when provider is anthropic. */
+const ANTHROPIC_BLOCKED_DOMAINS = new Set([
+  "stackoverflow.com",
+  "serverfault.com",
+  "askubuntu.com",
+  "reddit.com",
+  "superuser.com",
+]);
+
 const SYSTEM_PROMPT = `You help the user free up space on their disk by producing a cleanup report.
 
 RULES:
 - Only consider user-writable locations: home directory, caches in home, user data. NEVER use or suggest system folders (e.g. /System, /Library, /usr on macOS; C:\\Windows on Windows; /etc, /usr on Linux). Your tools will reject system paths.
 - Only suggest removing a user folder if it is a well-known junk-accumulator (e.g. Cache, Caches, Temp, tmp, Trash, .Trash, browser caches, npm/yarn caches, package-manager caches, IDE caches, old download installers). Do NOT suggest deleting arbitrary user folders such as Documents, Desktop, project directories, or application data unless they are clearly cache/temp/trash. When in doubt, do not report the folder.
 - For each cleanup opportunity you find, you MUST call report_cleanup_opportunity with an array "opportunities" where each item has: path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, and optional suggestedAction. You may report one or many opportunities per call; prefer batching multiple findings into a single call when you have several. Provide a clear contents description and safety justification for each.
+- When a command-related cache (e.g. npm, docker, brew, yarn) is using a lot of space and that command is installed, suggest using that command's own cleanup (e.g. \`npm cache clean --force\`, \`docker system prune\`, \`brew cleanup\`) in suggestedAction rather than only recommending deleting the directory. Prefer "run this command to clean" over "delete these files" when the cache is tied to an installed tool.
 
-WORKFLOW:
-1. First output a GAME PLAN: which directories you will inspect (only user locations), in what order, and what you will measure. The user will see this streamed.
-2. Then execute that plan using your tools: get_system_type, get_current_username, list_folders, list_folder_contents_by_size, change_directory, get_folder_capacity, get_folder_capacity_batch. Use list_folder_contents_by_size when you need to see which specific files or subfolders inside a directory are large (returns a markdown table of path, fileSize, kind sorted by size) so you can report individual items via report_cleanup_opportunity. Use get_folder_capacity_batch when you need to measure multiple paths to run them in parallel and save time.
-3. For each location (or batch of locations) that is safe to clean, call report_cleanup_opportunity with opportunities: [{ path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, suggestedAction? }, ...]. When you have finished exploring and reporting, summarize and stop.
+WORKFLOW — Plan-building phase (do these steps first, in order):
+(a) Look at the OS: Call get_system_type and get_current_username so the plan is OS-aware.
+(b) Look for common offenders: Call get_common_offender_paths to get candidate directories for the current OS (quick-win locations).
+(c) Probe for commands: Call command_probe with relevant command names (e.g. npm, yarn, docker, brew) to see which are installed and can inform which caches to prioritize.
+(d) Build the plan: Output your GAME PLAN (which directories to inspect, in what order, what you will measure). Then execute using your tools.
 
-If you have the web_search tool: You may use it to look up the best way to clean or safely remove suspicious or non-obvious items (e.g. from Stack Overflow, Reddit, Substack) instead of only suggesting deletion. Prefer suggesting actions like "Clear via app settings", "Run \`xyz\` to prune", or "Safe to delete after backup" when search results support them, and put that in suggestedAction. For ambiguous or large folders you are unsure about, consider searching for how others safely clean them. Optionally at the start of execution, search for common disk space hogs and cache locations for the current OS (use get_system_type first if needed) to inform your inspection order and game plan.`;
+Quick wins vs. filesystem exploration: Common offenders are quick wins—prioritize checking them first. You MUST still explore the filesystem: use list_folders from home, list_folder_contents_by_size on large dirs, drill into subfolders. Do not rely only on the common-offender list; it is a starting point, not a way to skip filesystem inspection.
+
+Execution: Use get_system_type, get_current_username, get_common_offender_paths, command_probe, list_folders, list_folder_contents_by_size, change_directory, get_folder_capacity, get_folder_capacity_batch. Use list_folder_contents_by_size when you need to see which files or subfolders inside a directory are large (returns a markdown table). Use get_folder_capacity_batch to measure multiple paths in parallel. For each location that is safe to clean, call report_cleanup_opportunity with opportunities: [{ path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, suggestedAction? }, ...]. When done, summarize and stop.
+
+If you have the web_search tool: You may use it to look up the best way to clean or safely remove suspicious or non-obvious items. Prefer suggesting actions like "Clear via app settings", "Run \`xyz\` to prune", or "Safe to delete after backup" when search results support them, and put that in suggestedAction.`;
 
 function resolveProvider(stateService: StateService, providerService: ProviderService): Provider {
   const state = stateService.getState();
@@ -62,16 +80,32 @@ function resolveProvider(stateService: StateService, providerService: ProviderSe
   return providers[0];
 }
 
-const ALLOWLIST_TOOL_NAMES = ["list_folders", "list_folder_contents_by_size", "change_directory", "get_folder_capacity", "get_folder_capacity_batch"];
+const ALLOWLIST_TOOL_NAMES = [
+  "list_folders",
+  "list_folder_contents_by_size",
+  "change_directory",
+  "get_folder_capacity",
+  "get_folder_capacity_batch",
+  "get_common_offender_paths",
+  "command_probe",
+];
 
-/** Build extra tools (web_search when OpenAI, report_cleanup_opportunity when accumulator). Used in getGraph and in tests. */
+type WebSearchTool =
+  | ReturnType<typeof openAITools.webSearch>
+  | ReturnType<typeof anthropicTools.webSearch_20250305>;
+
+/** Build extra tools (web_search when OpenAI/Anthropic, report_cleanup_opportunity when accumulator). Used in getGraph and in tests. */
 export function getExtraToolsForReport(
   provider: Provider,
   reportAccumulator?: ReportAccumulator
-): (ReturnType<typeof createReportCleanupOpportunityTool> | ReturnType<typeof openAITools.webSearch>)[] {
-  const extra: (ReturnType<typeof createReportCleanupOpportunityTool> | ReturnType<typeof openAITools.webSearch>)[] = [];
+): (ReturnType<typeof createReportCleanupOpportunityTool> | WebSearchTool)[] {
+  const extra: (ReturnType<typeof createReportCleanupOpportunityTool> | WebSearchTool)[] = [];
   if (provider.type === "openai") {
     extra.push(openAITools.webSearch({ filters: { allowedDomains: WEB_SEARCH_DOMAINS } }));
+  }
+  if (provider.type === "anthropic") {
+    const anthropicDomains = WEB_SEARCH_DOMAINS.filter((d) => !ANTHROPIC_BLOCKED_DOMAINS.has(d));
+    extra.push(anthropicTools.webSearch_20250305({ allowedDomains: anthropicDomains }));
   }
   if (reportAccumulator) {
     extra.push(createReportCleanupOpportunityTool(reportAccumulator));
@@ -126,6 +160,8 @@ export function createAgent(options: DiskCleanupAgentOptions): DiskCleanupAgent 
       const baseTools = [
         getSystemTypeTool,
         getCurrentUsernameTool,
+        wrapToolWithAllowlist(getCommonOffenderPathsTool, allowlistMiddleware),
+        wrapToolWithAllowlist(createCommandProbeTool(), allowlistMiddleware),
         wrapToolWithAllowlist(createListFoldersTool({ defaultCwd, onProgress }), allowlistMiddleware),
         wrapToolWithAllowlist(createListFolderContentsBySizeTool({ defaultCwd, onProgress }), allowlistMiddleware),
         wrapToolWithAllowlist(createChangeDirectoryTool({ defaultCwd }), allowlistMiddleware),

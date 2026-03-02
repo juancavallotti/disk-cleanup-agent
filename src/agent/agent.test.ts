@@ -64,12 +64,19 @@ describe("createAgent", () => {
     expect(webSearchTool).toBeDefined();
   });
 
-  it("getExtraToolsForReport does not include web search for Anthropic provider", () => {
+  it("getExtraToolsForReport includes web search for Anthropic provider", () => {
     const anthropicProvider: Provider = { id: "a1", type: "anthropic", apiKey: "sk-ant-x" };
     const accumulator = { push: () => {} };
     const extra = getExtraToolsForReport(anthropicProvider, accumulator);
-    expect(extra.length).toBe(1);
-    const webSearchTool = extra.find((t) => (t as { type?: string }).type === "web_search");
-    expect(webSearchTool).toBeUndefined();
+    expect(extra.length).toBe(2);
+    const nonReportTools = extra.filter((t) => (t as { name?: string }).name !== "report_cleanup_opportunity");
+    expect(nonReportTools.length).toBe(1);
+    expect(
+      nonReportTools.some(
+        (t) =>
+          (t as { type?: string }).type === "web_search" ||
+          (t as { name?: string }).name?.toLowerCase().includes("web")
+      )
+    ).toBe(true);
   });
 });

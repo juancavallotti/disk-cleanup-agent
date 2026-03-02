@@ -69,6 +69,8 @@ export interface StreamDisplayOptions {
 
 export interface RunStreamTaskOptions {
   onAbort?: () => void;
+  /** When false, do not set sharedState.done when the stream ends (e.g. so coordinator can still show a follow-up prompt). Default true. */
+  setDoneOnComplete?: boolean;
 }
 
 /**
@@ -81,7 +83,7 @@ export async function runStreamTask(
   sharedState: StreamSharedState,
   options: RunStreamTaskOptions = {}
 ): Promise<void> {
-  const { onAbort } = options;
+  const { onAbort, setDoneOnComplete = true } = options;
   const restore = (): void => {
     clearStreamArea();
   };
@@ -125,7 +127,9 @@ export async function runStreamTask(
     }
   } finally {
     process.off("SIGINT", handler);
-    sharedState.done = true;
+    if (setDoneOnComplete) {
+      sharedState.done = true;
+    }
     restore();
   }
 }

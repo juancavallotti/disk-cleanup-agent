@@ -9,7 +9,6 @@ import type { BootstrapContext } from "@/system/bootstrap.js";
 import {
   runStreamTask,
   runCoordinatorLoop,
-  consumeStreamWithTwoLines,
   type StreamSharedState,
 } from "./streamDisplay.js";
 import type { ReportAccumulator } from "@/agent/tools/reportCleanupOpportunity.js";
@@ -79,27 +78,39 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
 
   console.log("\nGenerating execution plan...\n");
 
-  const graph = agent.getGraph(accumulator);
-  const planStream = await graph.stream(
+  const planSharedState: StreamSharedState = {
+    lastChunk: null,
+    toolProgress: null,
+    done: false,
+  };
+  const planGraph = agent.getGraph(accumulator);
+  const planStream = await planGraph.stream(
     { messages: [new HumanMessage(PLAN_PROMPT)] },
     { streamMode: "values", recursionLimit }
   );
-  const planResult = await consumeStreamWithTwoLines(planStream);
-  const planPhaseMessages = planResult.messages;
+
+  const planTaskPromise = runStreamTask(planStream, planSharedState, {
+    setDoneOnComplete: false,
+  });
+  const planCoordinatorPromise = runCoordinatorLoop(planSharedState, userInputQueue);
+
+  await planTaskPromise;
+
+  const planPhaseMessages = planSharedState.lastChunk?.messages ?? [];
   const rawPlan = getPlanTextFromMessages(planPhaseMessages);
   const planBullets = formatPlanAsBullets(rawPlan);
   console.log("\nExecution plan:\n");
   console.log(planBullets);
   console.log("");
 
-  // Plan confirmation via user input queue; coordinator drains it.
   const planAcceptPromise = userInputQueue.requestInput({
     message: "Accept this plan and proceed? [y/n]",
     validate: YN_VALIDATE,
   });
-  const planSharedState: StreamSharedState = { lastChunk: null, toolProgress: null, done: true };
-  await runCoordinatorLoop(planSharedState, userInputQueue);
   const acceptAnswer = await planAcceptPromise;
+  planSharedState.done = true;
+  await planCoordinatorPromise;
+
   if (acceptAnswer.trim().toLowerCase() !== "y") {
     console.log("Plan not accepted. Exiting.");
     return;

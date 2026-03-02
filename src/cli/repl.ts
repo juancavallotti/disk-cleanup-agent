@@ -110,6 +110,7 @@ export function startRepl(context: BootstrapContext): void {
             rl.pause();
             try {
               await handleSelectProvider(context.providerService, context.stateService);
+              context.recreateAgent();
             } finally {
               rl.resume();
             }

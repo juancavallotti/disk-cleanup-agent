@@ -9,7 +9,7 @@ import type { Provider, ProviderType } from "@/system/types.js";
 
 const DEFAULT_MODEL: Record<ProviderType, string> = {
   openai: "gpt-5-mini",
-  anthropic: "claude-3-5-haiku-20241022",
+  anthropic: "claude-haiku-4-5",
 };
 
 const API_KEY_MESSAGE =
