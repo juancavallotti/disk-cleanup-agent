@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { StateService } from "@/system/stateService.js";
 import { createAllowlistMiddleware } from "./allowlistMiddleware.js";
-import { TOOL_ALLOWLIST_KEY, TOOL_AUTHORIZATION_STATUS_KEY } from "@/system/types.js";
+import {
+  TOOL_ALLOWLIST_KEY,
+  TOOL_AUTHORIZATION_STATUS_KEY,
+  TOOL_ALLOWED_ARGS_KEY,
+} from "@/system/types.js";
 
 const mockRequestUserInput = () => Promise.resolve("y");
 
@@ -63,5 +67,65 @@ describe("AllowlistMiddleware", () => {
     expect(history).toHaveLength(1);
     expect(history[0].toolName).toBe("denied_tool");
     expect(history[0].allowed).toBe(false);
+  });
+
+  it("requestToolAuthorization does not prompt when same (tool, args) already allowed", async () => {
+    let promptCount = 0;
+    const mw = createAllowlistMiddleware(stateService, {
+      requestUserInput: () => {
+        promptCount++;
+        return Promise.resolve("y");
+      },
+    });
+    await mw.requestToolAuthorization("list_folders", { path: "/tmp" });
+    expect(promptCount).toBe(1);
+    await mw.requestToolAuthorization("list_folders", { path: "/tmp" });
+    expect(promptCount).toBe(1);
+  });
+
+  it("requestToolAuthorization does not prompt when args are canonically equal (key order)", async () => {
+    let promptCount = 0;
+    const mw = createAllowlistMiddleware(stateService, {
+      requestUserInput: () => {
+        promptCount++;
+        return Promise.resolve("y");
+      },
+    });
+    await mw.requestToolAuthorization("change_directory", { path: "/home" });
+    expect(promptCount).toBe(1);
+    await mw.requestToolAuthorization("change_directory", { path: "/home" });
+    expect(promptCount).toBe(1);
+  });
+
+  it("persists allowed args in toolAllowedArgs so repeat call does not prompt", async () => {
+    const mw = createAllowlistMiddleware(stateService, {
+      requestUserInput: () => Promise.resolve("y"),
+    });
+    await mw.requestToolAuthorization("test_tool", { path: "/tmp", depth: 1 });
+    const allowedArgs = stateService.getState()[TOOL_ALLOWED_ARGS_KEY] as Record<string, string[]>;
+    expect(allowedArgs).toBeDefined();
+    expect(allowedArgs["test_tool"]).toHaveLength(1);
+    expect(allowedArgs["test_tool"][0]).toContain('"path"');
+    expect(allowedArgs["test_tool"][0]).toContain('"depth"');
+  });
+
+  it("migrates from toolAuthorizationStatus to toolAllowedArgs on first request", async () => {
+    stateService.setState((state) => {
+      state[TOOL_AUTHORIZATION_STATUS_KEY] = [
+        { toolName: "migrated_tool", args: { path: "/var" }, allowed: true, timestamp: new Date().toISOString() },
+      ];
+    });
+    let promptCount = 0;
+    const mw = createAllowlistMiddleware(stateService, {
+      requestUserInput: () => {
+        promptCount++;
+        return Promise.resolve("y");
+      },
+    });
+    await mw.requestToolAuthorization("migrated_tool", { path: "/var" });
+    expect(promptCount).toBe(0);
+    const allowedArgs = stateService.getState()[TOOL_ALLOWED_ARGS_KEY] as Record<string, string[]>;
+    expect(allowedArgs["migrated_tool"]).toHaveLength(1);
+    expect(allowedArgs["migrated_tool"][0]).toContain("/var");
   });
 });

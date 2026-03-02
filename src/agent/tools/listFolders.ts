@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
+import { expandTilde } from "./pathUtils.js";
 
 export interface ListFoldersOptions {
   defaultCwd?: string;
@@ -15,7 +16,9 @@ export interface ListFoldersOptions {
 }
 
 function listFolders(path: string, defaultCwd?: string): string {
-  const toResolve = path.trim() || defaultCwd || process.cwd();
+  const base = defaultCwd || process.cwd();
+  const expanded = expandTilde(path);
+  const toResolve = expanded.trim() ? resolve(base, expanded) : base;
   const err = assertNotSystemPath(toResolve);
   if (err) return err;
   try {
@@ -37,7 +40,9 @@ export function createListFoldersTool(options: ListFoldersOptions = {}) {
   return tool(
     ((input: { path?: string }) => {
       const path = input.path ?? "";
-      const toResolve = path.trim() || defaultCwd || process.cwd();
+      const base = defaultCwd || process.cwd();
+      const expanded = expandTilde(path);
+      const toResolve = expanded.trim() ? resolve(base, expanded) : base;
       onProgress?.(`Listing ${toResolve || "."}...`);
       return listFolders(path, defaultCwd);
     }) as (input: unknown) => string,

@@ -3,23 +3,13 @@
  */
 
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import type { AllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
-
-const ALLOWLISTED_TOOL_NAMES = [
-  "list_folders",
-  "list_folder_contents_by_size",
-  "change_directory",
-  "get_folder_capacity",
-  "get_folder_capacity_batch",
-  "get_common_offender_paths",
-  "command_probe",
-];
+import { ALLOWLIST_TOOL_NAMES, type AllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
 
 export function wrapToolWithAllowlist(
   tool: StructuredToolInterface,
   allowlistMiddleware: AllowlistMiddleware
 ): StructuredToolInterface {
-  if (!ALLOWLISTED_TOOL_NAMES.includes(tool.name)) {
+  if (!(ALLOWLIST_TOOL_NAMES as readonly string[]).includes(tool.name)) {
     return tool;
   }
   const originalInvoke = tool.invoke.bind(tool);

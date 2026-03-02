@@ -15,6 +15,8 @@ export interface Provider {
 export const SELECTED_PROVIDER_ID_KEY = "selectedProviderId";
 export const TOOL_ALLOWLIST_KEY = "toolAllowlist";
 export const TOOL_AUTHORIZATION_STATUS_KEY = "toolAuthorizationStatus";
+/** Per-tool allowlist of approved argument signatures (canonical JSON strings). */
+export const TOOL_ALLOWED_ARGS_KEY = "toolAllowedArgs";
 
 export interface AppConfig {
   providers: Provider[];

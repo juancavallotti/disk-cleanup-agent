@@ -7,6 +7,7 @@ import { resolve, basename } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
+import { expandTilde } from "./pathUtils.js";
 import { getFolderCapacityAsync } from "./folderSize.js";
 
 /** Truncate path for progress display so it fits ~80-char line (e.g. "Measuring 3/10: .../Cache"). */
@@ -23,7 +24,8 @@ async function measureOne(
   defaultCwd?: string
 ): Promise<{ path: string; sizeBytes: number; error?: string }> {
   const base = defaultCwd || process.cwd();
-  const toResolve = path.trim() ? resolve(base, path) : base;
+  const expanded = expandTilde(path);
+  const toResolve = expanded.trim() ? resolve(base, expanded) : base;
   const err = assertNotSystemPath(toResolve);
   if (err) return { path: toResolve, sizeBytes: 0, error: err };
   try {

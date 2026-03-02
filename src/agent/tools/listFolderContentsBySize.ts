@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
+import { expandTilde } from "./pathUtils.js";
 import { getFolderCapacitySync } from "./folderSize.js";
 
 export interface ListFolderContentsBySizeOptions {
@@ -24,7 +25,8 @@ interface Row {
 
 function listFolderContentsBySize(path: string, defaultCwd?: string): string {
   const base = defaultCwd || process.cwd();
-  const toResolve = path.trim() ? resolve(base, path) : base;
+  const expanded = expandTilde(path);
+  const toResolve = expanded.trim() ? resolve(base, expanded) : base;
   const err = assertNotSystemPath(toResolve);
   if (err) return err;
   try {
@@ -64,7 +66,8 @@ export function createListFolderContentsBySizeTool(options: ListFolderContentsBy
     ((input: { path?: string }) => {
       const path = input.path ?? "";
       const base = defaultCwd || process.cwd();
-      const toResolve = path.trim() ? resolve(base, path) : base;
+      const expanded = expandTilde(path);
+      const toResolve = expanded.trim() ? resolve(base, expanded) : base;
       onProgress?.(`Listing contents by size for ${toResolve || "."}...`);
       return listFolderContentsBySize(path, defaultCwd);
     }) as (input: unknown) => string,

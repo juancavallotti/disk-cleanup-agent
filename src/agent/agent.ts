@@ -5,7 +5,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import type { StateService } from "@/system/stateService.js";
 import type { ProviderService } from "@/services/providerService.js";
-import type { AllowlistMiddleware } from "./allowlistMiddleware.js";
+import { ALLOWLIST_TOOL_NAMES, type AllowlistMiddleware } from "./allowlistMiddleware.js";
 import { createChatModelFromProvider } from "./chatModel.js";
 import { SELECTED_PROVIDER_ID_KEY } from "@/system/types.js";
 import type { Provider } from "@/system/types.js";
@@ -65,18 +65,6 @@ function resolveProvider(stateService: StateService, providerService: ProviderSe
   }
   return providers[0];
 }
-
-const ALLOWLIST_TOOL_NAMES = [
-  "get_skill",
-  "list_folders",
-  "list_folder_contents_by_size",
-  "change_directory",
-  "get_folder_capacity",
-  "get_folder_capacity_batch",
-  "get_common_offender_paths",
-  "command_probe",
-  "submit_cleanup_script",
-];
 
 type WebSearchTool =
   | ReturnType<typeof openAITools.webSearch>

@@ -7,11 +7,13 @@ import { resolve } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
+import { expandTilde } from "./pathUtils.js";
 import { getFolderCapacityAsync } from "./folderSize.js";
 
 async function getFolderCapacity(path: string, defaultCwd?: string): Promise<string> {
   const base = defaultCwd || process.cwd();
-  const toResolve = path.trim() ? resolve(base, path) : base;
+  const expanded = expandTilde(path);
+  const toResolve = expanded.trim() ? resolve(base, expanded) : base;
   const err = assertNotSystemPath(toResolve);
   if (err) return err;
   try {
