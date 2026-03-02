@@ -13,28 +13,44 @@ const DEFAULT_MODEL: Record<ProviderType, string> = {
 };
 
 const API_KEY_MESSAGE =
-  "API key for this provider is not set. Set it in the app config (e.g. add the provider again with your API key, or edit the config file in your app config directory).";
+  "API key for this provider is not set. Set it in the app config or in .env (OPENAI_API_KEY / OPENAI_TOKEN for OpenAI, ANTHROPIC_API_KEY for Anthropic).";
+
+function resolveOpenAIKey(provider: Provider): string {
+  const fromProvider = provider.apiKey?.trim();
+  if (fromProvider) return fromProvider;
+  const fromEnv = process.env.OPENAI_API_KEY?.trim() ?? process.env.OPENAI_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  throw new Error(API_KEY_MESSAGE);
+}
+
+function resolveAnthropicKey(provider: Provider): string {
+  const fromProvider = provider.apiKey?.trim();
+  if (fromProvider) return fromProvider;
+  const fromEnv = process.env.ANTHROPIC_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+  throw new Error(API_KEY_MESSAGE);
+}
 
 export function createChatModelFromProvider(provider: Provider): BaseChatModel {
   const modelId = provider.model?.trim() || DEFAULT_MODEL[provider.type];
-  const apiKey = provider.apiKey?.trim();
-  if (!apiKey) {
-    throw new Error(API_KEY_MESSAGE);
-  }
 
   switch (provider.type) {
-    case "openai":
+    case "openai": {
+      const apiKey = resolveOpenAIKey(provider);
       return new ChatOpenAI({
         model: modelId,
         temperature: 0.7,
         openAIApiKey: apiKey,
       });
-    case "anthropic":
+    }
+    case "anthropic": {
+      const apiKey = resolveAnthropicKey(provider);
       return new ChatAnthropic({
         model: modelId,
         temperature: 0.7,
         anthropicApiKey: apiKey,
       });
+    }
     default:
       throw new Error(`Unsupported provider type: ${(provider as Provider).type}`);
   }

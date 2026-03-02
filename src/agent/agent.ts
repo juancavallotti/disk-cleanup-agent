@@ -14,6 +14,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 import type { ReportAccumulator } from "./tools/reportCleanupOpportunity.js";
 import {
   getSystemTypeTool,
+  getCurrentUsernameTool,
   createListFoldersTool,
   createChangeDirectoryTool,
   createGetFolderCapacityTool,
@@ -30,7 +31,7 @@ RULES:
 
 WORKFLOW:
 1. First output a GAME PLAN: which directories you will inspect (only user locations), in what order, and what you will measure. The user will see this streamed.
-2. Then execute that plan using your tools: get_system_type, list_folders, change_directory, get_folder_capacity, get_folder_capacity_batch. Use get_folder_capacity_batch when you need to measure multiple paths to run them in parallel and save time.
+2. Then execute that plan using your tools: get_system_type, get_current_username, list_folders, change_directory, get_folder_capacity, get_folder_capacity_batch. Use get_folder_capacity_batch when you need to measure multiple paths to run them in parallel and save time.
 3. For each location that is safe to clean, call report_cleanup_opportunity. When you have finished exploring and reporting, summarize and stop.`;
 
 function resolveProvider(stateService: StateService, providerService: ProviderService): Provider {
@@ -85,6 +86,7 @@ export function createAgent(options: DiskCleanupAgentOptions): DiskCleanupAgent 
 
       const baseTools = [
         getSystemTypeTool,
+        getCurrentUsernameTool,
         wrapToolWithAllowlist(createListFoldersTool({ defaultCwd }), allowlistMiddleware),
         wrapToolWithAllowlist(createChangeDirectoryTool({ defaultCwd }), allowlistMiddleware),
         wrapToolWithAllowlist(createGetFolderCapacityTool({ defaultCwd }), allowlistMiddleware),
