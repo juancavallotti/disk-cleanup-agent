@@ -1,18 +1,14 @@
 /**
  * Allowlist middleware: register allowed tools, persist per-tool allowed-args in state.
  * Tool authorization is human-in-the-loop: prompt only when (tool, args) is new; once allowed, same args are auto-allowed.
+ * State is keyed by provider id (one allowlist per model provider). The `id` tool argument is ignored.
  */
 
 import type { StateService } from "@/system/stateService.js";
-import {
-  TOOL_ALLOWLIST_KEY,
-  TOOL_AUTHORIZATION_STATUS_KEY,
-  TOOL_ALLOWED_ARGS_KEY,
-} from "@/system/types.js";
+import { TOOL_ALLOWLIST_KEY, TOOL_ALLOWED_ARGS_KEY } from "@/system/types.js";
 
-/** Single source of truth for which tools participate in allowlist behavior. */
+/** Single source of truth for which tools participate in allowlist behavior. Skills (get_skill) are always allowed and not listed here. */
 export const ALLOWLIST_TOOL_NAMES = [
-  "get_skill",
   "list_folders",
   "list_folder_contents_by_size",
   "change_directory",
@@ -23,13 +19,6 @@ export const ALLOWLIST_TOOL_NAMES = [
   "submit_cleanup_script",
 ] as const;
 
-export interface AuthorizationRecord {
-  toolName: string;
-  args: unknown;
-  allowed: boolean;
-  timestamp: string;
-}
-
 /** Options for requesting a single user input (used by the CLI coordinator to prompt). */
 export interface RequestInputOptions {
   message: string;
@@ -39,6 +28,8 @@ export interface RequestInputOptions {
 export interface AllowlistMiddlewareOptions {
   /** Request user input; the CLI coordinator will fulfill this via the user input queue. */
   requestUserInput: (options: RequestInputOptions) => Promise<string>;
+  /** Resolve the current model provider id so allowlist state is scoped per provider. */
+  getCurrentProviderId: () => string;
 }
 
 export interface AllowlistMiddleware {
@@ -56,10 +47,22 @@ const YN_VALIDATE = (v: string): true | string => {
   return "Enter y or n";
 };
 
-/** Stable string for (tool, args) so same logical args match (e.g. key order ignored). */
-function canonicalizeArgs(args: unknown): string {
-  if (args === null || typeof args !== "object") return String(args);
-  const sorted = sortObjectKeys(args as Record<string, unknown>);
+/** Strip `id` from args (unique per execution; not used for allowlist). */
+function argsWithoutId(args: unknown): Record<string, unknown> {
+  if (args === null || typeof args !== "object" || Array.isArray(args)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (k !== "id") out[k] = v;
+  }
+  return out;
+}
+
+/** Canonical string for a single value (primitive or object) for comparison and storage. */
+function canonicalizeValue(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return JSON.stringify(value.map((item) => canonicalizeValue(item)));
+  const sorted = sortObjectKeys(value as Record<string, unknown>);
   return JSON.stringify(sorted);
 }
 
@@ -82,97 +85,169 @@ function sortObjectKeys(obj: Record<string, unknown>): unknown {
   return out;
 }
 
+/** Per-provider allowlist: Record<providerId, string[]>. Invalid or old shape → empty. */
+function getAllowlistByProvider(state: Record<string, unknown>, providerId: string): string[] {
+  const root = state[TOOL_ALLOWLIST_KEY];
+  if (typeof root !== "object" || root === null) return [];
+  const perProvider = root as Record<string, unknown>;
+  const list = perProvider[providerId];
+  return Array.isArray(list) ? (list as string[]) : [];
+}
+
+/** Per-provider allowed args: Record<providerId, Record<toolName, Record<argName, string[]>>>. Invalid or old shape → empty. */
+function getAllowedArgsByProvider(
+  state: Record<string, unknown>,
+  providerId: string
+): Record<string, Record<string, string[]>> {
+  const root = state[TOOL_ALLOWED_ARGS_KEY];
+  if (typeof root !== "object" || root === null) return {};
+  const perProvider = root as Record<string, unknown>;
+  const perTool = perProvider[providerId];
+  if (typeof perTool !== "object" || perTool === null) return {};
+  const toolMap = perTool as Record<string, unknown>;
+  const result: Record<string, Record<string, string[]>> = {};
+  for (const [toolName, argMap] of Object.entries(toolMap)) {
+    if (typeof argMap !== "object" || argMap === null) continue;
+    const argRecord = argMap as Record<string, unknown>;
+    const arrMap: Record<string, string[]> = {};
+    for (const [argName, arr] of Object.entries(argRecord)) {
+      if (Array.isArray(arr)) {
+        const strings = arr.filter((x): x is string => typeof x === "string");
+        arrMap[argName] = strings;
+      }
+    }
+    if (Object.keys(arrMap).length > 0) result[toolName] = arrMap;
+  }
+  return result;
+}
+
+/** Check if a single arg value is allowed: literal → one entry in set; array → every element in set. */
+function isArgValueAllowed(value: unknown, allowedSet: Set<string>): boolean {
+  if (Array.isArray(value)) {
+    return value.every((elem) => allowedSet.has(canonicalizeValue(elem)));
+  }
+  return allowedSet.has(canonicalizeValue(value));
+}
+
+/** Collect values to add for one arg: literal → [canonical]; array → each element canonicalized. */
+function valuesToAdd(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((elem) => canonicalizeValue(elem));
+  }
+  return [canonicalizeValue(value)];
+}
+
 export function createAllowlistMiddleware(
   stateService: StateService,
   options: AllowlistMiddlewareOptions
 ): AllowlistMiddleware {
-  const { requestUserInput } = options;
+  const { requestUserInput, getCurrentProviderId } = options;
 
   /** Serialize authorization prompts so only one is shown at a time. */
   let authTail: Promise<boolean> = Promise.resolve(true);
 
   function getAllowlist(): string[] {
+    const providerId = getCurrentProviderId();
+    if (!providerId) return [];
     const state = stateService.getState();
-    const list = state[TOOL_ALLOWLIST_KEY];
-    return Array.isArray(list) ? (list as string[]) : [];
+    return getAllowlistByProvider(state, providerId);
   }
 
-  function getAllowedArgsForTool(toolName: string): string[] {
+  function getAllowedArgsForTool(toolName: string): Record<string, string[]> {
+    const providerId = getCurrentProviderId();
+    if (!providerId) return {};
     const state = stateService.getState();
-    const map = state[TOOL_ALLOWED_ARGS_KEY];
-    if (typeof map !== "object" || map === null) return [];
-    const arr = (map as Record<string, string[]>)[toolName];
-    return Array.isArray(arr) ? arr : [];
-  }
-
-  function migrateFromAuthorizationStatus(): void {
-    const state = stateService.getState();
-    const existing = state[TOOL_ALLOWED_ARGS_KEY];
-    if (existing != null && typeof existing === "object") return;
-    const history = state[TOOL_AUTHORIZATION_STATUS_KEY];
-    if (!Array.isArray(history)) return;
-    const allowedArgs: Record<string, string[]> = {};
-    for (const record of history as AuthorizationRecord[]) {
-      if (!record.allowed || !record.toolName) continue;
-      const canonical = canonicalizeArgs(record.args);
-      const list = allowedArgs[record.toolName] ?? [];
-      if (!list.includes(canonical)) list.push(canonical);
-      allowedArgs[record.toolName] = list;
-    }
-    if (Object.keys(allowedArgs).length === 0) return;
-    stateService.setState((s) => {
-      s[TOOL_ALLOWED_ARGS_KEY] = allowedArgs;
-    });
+    const perTool = getAllowedArgsByProvider(state, providerId);
+    return perTool[toolName] ?? {};
   }
 
   async function runOneAuthorization(toolName: string, args: unknown): Promise<boolean> {
-    const canonical = canonicalizeArgs(args);
     const argsStr = typeof args === "object" && args !== null ? JSON.stringify(args) : String(args);
     const answer = await requestUserInput({
       message: `Allow tool "${toolName}" with args: ${argsStr}? [y/n]`,
       validate: YN_VALIDATE,
     });
     const allowed = answer.trim().toLowerCase() === "y";
-    const record: AuthorizationRecord = {
-      toolName,
-      args,
-      allowed,
-      timestamp: new Date().toISOString(),
-    };
+    if (!allowed) return false;
+
+    const providerId = getCurrentProviderId();
+    if (!providerId) return true;
+
+    const filtered = argsWithoutId(args);
     stateService.setState((state) => {
-      const history = Array.isArray(state[TOOL_AUTHORIZATION_STATUS_KEY])
-        ? (state[TOOL_AUTHORIZATION_STATUS_KEY] as AuthorizationRecord[])
-        : [];
-      state[TOOL_AUTHORIZATION_STATUS_KEY] = [...history, record];
-      if (allowed) {
-        const map = (state[TOOL_ALLOWED_ARGS_KEY] ?? {}) as Record<string, string[]>;
-        const list = map[toolName] ?? [];
-        if (!list.includes(canonical)) map[toolName] = [...list, canonical];
-        state[TOOL_ALLOWED_ARGS_KEY] = map;
+      const rootAllowlist = (state[TOOL_ALLOWLIST_KEY] ?? {}) as Record<string, unknown>;
+      let list = getAllowlistByProvider(state, providerId);
+      if (!list.includes(toolName)) {
+        list = [...list, toolName];
+        rootAllowlist[providerId] = list;
+        state[TOOL_ALLOWLIST_KEY] = rootAllowlist;
       }
+
+      const rootArgs = (state[TOOL_ALLOWED_ARGS_KEY] ?? {}) as Record<string, unknown>;
+      const perProvider = (rootArgs[providerId] ?? {}) as Record<string, unknown>;
+      const perTool = (perProvider[toolName] ?? {}) as Record<string, string[]>;
+
+      for (const [argName, value] of Object.entries(filtered)) {
+        const toAdd = valuesToAdd(value);
+        const existing = perTool[argName] ?? [];
+        const set = new Set(existing);
+        for (const c of toAdd) set.add(c);
+        perTool[argName] = [...set];
+      }
+      perProvider[toolName] = perTool;
+      rootArgs[providerId] = perProvider;
+      state[TOOL_ALLOWED_ARGS_KEY] = rootArgs;
     });
-    return allowed;
+    return true;
+  }
+
+  /** True if (tool, args without id) is already allowed for current provider. */
+  function isAlreadyAllowed(toolName: string, args: unknown): boolean {
+    const providerId = getCurrentProviderId();
+    if (!providerId) return false;
+
+    const allowlist = getAllowlist();
+    if (!allowlist.includes(toolName)) return false;
+
+    const filtered = argsWithoutId(args);
+    const allowedPerArg = getAllowedArgsForTool(toolName);
+
+    for (const [argName, value] of Object.entries(filtered)) {
+      const allowedList = allowedPerArg[argName];
+      if (!Array.isArray(allowedList)) return false;
+      const set = new Set(allowedList);
+      if (!isArgValueAllowed(value, set)) return false;
+    }
+
+    const allowedKeys = new Set(Object.keys(allowedPerArg));
+    const incomingKeys = new Set(Object.keys(filtered));
+    if (incomingKeys.size > 0 && allowedKeys.size === 0) return false;
+    for (const k of incomingKeys) {
+      if (!allowedKeys.has(k)) return false;
+    }
+    return true;
   }
 
   return {
     registerAllowedTool(name: string): void {
       const trimmed = name.trim();
       if (!trimmed) return;
+      const providerId = getCurrentProviderId();
+      if (!providerId) return;
       const list = getAllowlist();
       if (list.includes(trimmed)) return;
       stateService.setState((state) => {
-        const arr = Array.isArray(state[TOOL_ALLOWLIST_KEY]) ? (state[TOOL_ALLOWLIST_KEY] as string[]) : [];
-        state[TOOL_ALLOWLIST_KEY] = [...arr, trimmed];
+        const root = (state[TOOL_ALLOWLIST_KEY] ?? {}) as Record<string, unknown>;
+        const providerList = getAllowlistByProvider(state, providerId);
+        root[providerId] = [...providerList, trimmed];
+        state[TOOL_ALLOWLIST_KEY] = root;
       });
     },
 
     getAllowlist,
 
     async requestToolAuthorization(toolName: string, args: unknown): Promise<boolean> {
-      migrateFromAuthorizationStatus();
-      const canonical = canonicalizeArgs(args);
-      const allowedList = getAllowedArgsForTool(toolName);
-      if (allowedList.includes(canonical)) return true;
+      if (isAlreadyAllowed(toolName, args)) return true;
 
       const previous = authTail;
       const ourTurn = previous.then(() => runOneAuthorization(toolName, args));

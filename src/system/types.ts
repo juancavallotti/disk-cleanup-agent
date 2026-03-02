@@ -13,9 +13,9 @@ export interface Provider {
 
 /** State keys for state service (single source of truth). */
 export const SELECTED_PROVIDER_ID_KEY = "selectedProviderId";
+/** Per-provider list of allowed tool names: Record<providerId, string[]>. */
 export const TOOL_ALLOWLIST_KEY = "toolAllowlist";
-export const TOOL_AUTHORIZATION_STATUS_KEY = "toolAuthorizationStatus";
-/** Per-tool allowlist of approved argument signatures (canonical JSON strings). */
+/** Per-provider, per-tool, per-arg allowed values: Record<providerId, Record<toolName, Record<argName, string[]>>>. */
 export const TOOL_ALLOWED_ARGS_KEY = "toolAllowedArgs";
 
 export interface AppConfig {

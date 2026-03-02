@@ -27,6 +27,7 @@ describe("createAgent", () => {
     providerService = new ProviderService(configService);
     allowlistMiddleware = createAllowlistMiddleware(stateService, {
       requestUserInput: () => Promise.resolve("y"),
+      getCurrentProviderId: () => "openai-1",
     });
   });
 

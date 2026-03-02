@@ -5,6 +5,7 @@
 
 import { ConfigService } from "./configService.js";
 import { StateService } from "./stateService.js";
+import { SELECTED_PROVIDER_ID_KEY } from "./types.js";
 import { ProviderService } from "@/services/providerService.js";
 import { createAllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
 import { createAgent } from "@/agent/agent.js";
@@ -61,6 +62,13 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
   const userInputQueue = createUserInputQueue();
   const allowlistMiddleware = createAllowlistMiddleware(stateService, {
     requestUserInput: (options) => userInputQueue.requestInput(options),
+    getCurrentProviderId: () => {
+      const state = stateService.getState();
+      const selectedId = state[SELECTED_PROVIDER_ID_KEY] as string | undefined;
+      const list = providerService.listProviders();
+      const found = selectedId ? list.find((p) => p.id === selectedId) : null;
+      return (found ?? list[0])?.id ?? "";
+    },
   });
 
   const agentRef: { current: DiskCleanupAgent } = {
