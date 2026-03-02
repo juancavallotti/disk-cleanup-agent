@@ -35,7 +35,7 @@ describe("handleDeleteProvider", () => {
       stateService,
       providerService,
       agent: {} as BootstrapContext["agent"],
-      recreateAgent,
+      recreateAgent: recreateAgent as () => void,
       userInputQueue: {} as BootstrapContext["userInputQueue"],
     };
   });

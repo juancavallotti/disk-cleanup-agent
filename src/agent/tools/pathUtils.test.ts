@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { homedir } from "node:os";
 import { expandTilde } from "./pathUtils.js";
 
