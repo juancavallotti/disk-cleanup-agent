@@ -58,6 +58,7 @@ export async function runAddProviderWorkflow(options: AddProviderWorkflowOptions
 }
 
 async function runAddProviderWorkflowInner(providerService: ProviderService): Promise<boolean> {
+  process.stdout.write("\n\n");
   const choice = await select({
     message: "Select provider type (↑/↓ arrows, Enter to select)",
     choices: [
@@ -77,13 +78,14 @@ async function runAddProviderWorkflowInner(providerService: ProviderService): Pr
   const type = choice as ProviderType;
   const { apiKeyUrl, name } = PROVIDER_META[type];
   console.log(`\nGet your ${name} API key at: ${apiKeyUrl}\n`);
-
+  process.stdout.write("\n\n");
   const idAnswer = await input({
     message: "Provider id (optional, press Enter to auto-generate)",
     default: "",
   });
   if (isQuitInput(idAnswer)) return false;
 
+  process.stdout.write("\n\n");
   const apiKeyAnswer = await input({
     message: "API key",
     validate: (value) =>

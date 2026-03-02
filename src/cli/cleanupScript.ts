@@ -96,6 +96,7 @@ export async function runCleanupScript(context: BootstrapContext): Promise<void>
   if (reportPaths.length === 1) {
     chosenReportPath = reportPaths[0];
   } else {
+    process.stdout.write("\n\n");
     const choice = await select({
       message: "Select a report to generate a script from",
       choices: reportPaths.map((p) => ({ name: p, value: p })),
@@ -136,7 +137,7 @@ export async function runCleanupScript(context: BootstrapContext): Promise<void>
 
   const graph = agent.getGraph(undefined, accumulator, {
     thinkingStreamWriter: (text) => {
-      sharedState.toolProgress = text;
+      sharedState.toolProgress = text.replace(/\r\n|\r|\n/g, " ").trim();
     },
   });
 

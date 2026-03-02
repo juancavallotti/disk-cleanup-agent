@@ -56,8 +56,10 @@ function getLastContent(messages: BaseMessage[]): string {
     const m = messages[i];
     const content = (m as { content?: unknown }).content;
     if (typeof content === "string" && content.trim()) {
+      const noNewlines = content.replace(/\r\n|\r|\n/g, " ").trim();
+      if (!noNewlines) continue;
       const max = 80;
-      return content.length <= max ? content : content.slice(0, max) + "...";
+      return noNewlines.length <= max ? noNewlines : noNewlines.slice(0, max) + "...";
     }
   }
   return "";

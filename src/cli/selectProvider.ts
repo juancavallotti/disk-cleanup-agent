@@ -24,6 +24,7 @@ export async function handleSelectProvider(
     value: p.id,
   }));
 
+  process.stdout.write("\n\n");
   const selectedId = await select({
     message: "Select provider to use (↑/↓ arrows, Enter to select)",
     choices,

@@ -25,6 +25,7 @@ export async function handleDeleteProvider(context: BootstrapContext, id: string
     }));
     choices.push({ name: "Cancel", value: CANCEL_VALUE });
 
+    process.stdout.write("\n\n");
     const selectedId = await select({
       message: "Select provider to delete (↑/↓ arrows, Enter to select)",
       choices,

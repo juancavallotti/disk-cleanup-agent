@@ -75,6 +75,7 @@ export async function runCleanupReportView(context: BootstrapContext): Promise<v
   if (paths.length === 1) {
     chosenPath = paths[0];
   } else {
+    process.stdout.write("\n\n");
     const choice = await select({
       message: "Select a report to view",
       choices: paths.map((p) => ({ name: p, value: p })),

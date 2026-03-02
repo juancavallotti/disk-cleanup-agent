@@ -104,7 +104,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   const planBullets = formatPlanAsBullets(rawPlan);
   console.log("\nExecution plan:\n");
   console.log(planBullets);
-  console.log("");
+  process.stdout.write("\n\n");
 
   const planAcceptPromise = userInputQueue.requestInput({
     message: "Accept this plan and proceed? [y/n]",
@@ -131,7 +131,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   };
   const executionGraph = agent.getGraph(accumulator, undefined, {
     thinkingStreamWriter: (text) => {
-      sharedState.toolProgress = text;
+      sharedState.toolProgress = text.replace(/\r\n|\r|\n/g, " ").trim();
     },
   });
   const stream = await executionGraph.stream(
