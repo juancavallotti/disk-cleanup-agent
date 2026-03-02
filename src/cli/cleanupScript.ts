@@ -1,7 +1,9 @@
 /**
- * cleanup script — run agent to produce a cleanup script (bash/PowerShell), then show it in a browser with syntax highlighting.
+ * cleanup script — select a cleanup report, generate a shell script from it, then show it in a browser with syntax highlighting.
+ * If there are no reports, suggests running "cleanup report" first.
  */
 
+import select from "@inquirer/select";
 import { HumanMessage } from "@langchain/core/messages";
 import type { BootstrapContext } from "@/system/bootstrap.js";
 import {
@@ -11,15 +13,37 @@ import {
 } from "./streamDisplay.js";
 import type { ScriptAccumulator } from "@/agent/tools/submitCleanupScript.js";
 import { ScriptService } from "@/services/scriptService.js";
+import { ReportService } from "@/services/reportService.js";
 import { scriptToHtml } from "@/services/scriptToHtml.js";
 import { getPlatformName } from "@/agent/tools/systemPaths.js";
+import { formatBytes } from "@/services/reportToHtml.js";
+import type { CleanupReport } from "@/services/reportTypes.js";
 import { writeFileSync, existsSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-const SCRIPT_TASK =
-  'The user requested a cleanup script. Call the skills tool with skill name "script" and follow its instructions.';
+function buildScriptTaskFromReport(report: CleanupReport): string {
+  const lines: string[] = [
+    "The user selected a cleanup report. Generate a shell script that performs the cleanups listed below.",
+    "Do not explore the filesystem—use only get_system_type and submit_cleanup_script.",
+    "Call the skills tool with skill name \"script\" for format guidance (bash vs PowerShell), then produce the script from these opportunities and call submit_cleanup_script with the full script content.",
+    "",
+    "## Cleanup opportunities from the report",
+  ];
+  for (const opp of report.opportunities) {
+    lines.push(`- path: ${opp.path}`);
+    lines.push(`  pathDescription: ${opp.pathDescription}`);
+    lines.push(`  sizeBytes: ${opp.sizeBytes} (${formatBytes(opp.sizeBytes)})`);
+    lines.push(`  contentsDescription: ${opp.contentsDescription}`);
+    lines.push(`  whySafeToDelete: ${opp.whySafeToDelete}`);
+    if (opp.suggestedAction) {
+      lines.push(`  suggestedAction: ${opp.suggestedAction}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
 
 const TEMP_SUBDIR = "disk-cleanup";
 const tempPathsToDelete = new Set<string>();
@@ -60,6 +84,31 @@ function shellTypeToExtension(
 export async function runCleanupScript(context: BootstrapContext): Promise<void> {
   const { agent, configService, userInputQueue } = context;
 
+  const reportService = new ReportService({ configService });
+  const reportPaths = reportService.listReports();
+
+  if (reportPaths.length === 0) {
+    console.log("No reports found. Run 'cleanup report' first.");
+    return;
+  }
+
+  let chosenReportPath: string;
+  if (reportPaths.length === 1) {
+    chosenReportPath = reportPaths[0];
+  } else {
+    const choice = await select({
+      message: "Select a report to generate a script from",
+      choices: reportPaths.map((p) => ({ name: p, value: p })),
+    });
+    chosenReportPath = choice;
+  }
+
+  const report = reportService.getReport(chosenReportPath);
+  if (!report) {
+    console.error("Could not load report.");
+    return;
+  }
+
   const platform = getPlatformName();
   const shellType: "mac" | "windows" | "linux" =
     platform === "windows" ? "windows" : platform === "mac" ? "mac" : "linux";
@@ -75,8 +124,9 @@ export async function runCleanupScript(context: BootstrapContext): Promise<void>
   };
 
   const recursionLimit = configService.getConfig().recursionLimit ?? 100;
+  const scriptTask = buildScriptTaskFromReport(report);
 
-  console.log("\nGenerating cleanup script...\n");
+  console.log("\nGenerating cleanup script from report...\n");
 
   const sharedState: StreamSharedState = {
     lastChunk: null,
@@ -91,7 +141,7 @@ export async function runCleanupScript(context: BootstrapContext): Promise<void>
   });
 
   const stream = await graph.stream(
-    { messages: [new HumanMessage(SCRIPT_TASK)] },
+    { messages: [new HumanMessage(scriptTask)] },
     { streamMode: ["values", "messages"], recursionLimit }
   );
 

@@ -16,6 +16,9 @@ Produce a single cleanup script in the user's native shell language. Do not exec
 
 ## Workflow
 
+**When the task says the user selected a report and lists "Cleanup opportunities from the report":** Do not explore the filesystem. Use only get_system_type and submit_cleanup_script. Generate the script from the listed opportunities (paths, suggestedAction, etc.) and call submit_cleanup_script with the full script.
+
+**When exploring from scratch:**
 1. Call get_system_type to determine the shell: use **bash** for mac or linux, **PowerShell** for windows.
 2. Explore with the same filesystem tools: get_current_username, get_common_offender_paths, command_probe, list_folders, list_folder_contents_by_size, get_folder_capacity, get_folder_capacity_batch. Identify what can be safely cleaned.
 3. Write a single script that performs the cleanup (e.g. rm -rf for caches on Unix, or Remove-Item on Windows; or running npm cache clean, brew cleanup, etc. where appropriate).
