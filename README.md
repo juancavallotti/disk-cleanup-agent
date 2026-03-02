@@ -65,6 +65,51 @@ disk-cleanup --help
 
 Then run `disk-cleanup` from any directory.
 
+## Commands
+
+### CLI (direct)
+
+When you pass a subcommand, the app runs that command and exits:
+
+```bash
+disk-cleanup --help              # Show main help
+disk-cleanup cleanup --help      # Show cleanup subcommands
+```
+
+| Command | Description |
+|--------|-------------|
+| `disk-cleanup cleanup report` | Generate a cleanup report. The agent explores user directories (never system folders), suggests safe cleanup opportunities, and writes a YAML report to the app data dir (`~/.disk-cleanup/`). You approve a plan first, then the agent runs and streams progress. |
+| `disk-cleanup cleanup script` | Generate a cleanup script from an existing report. You pick a report (if more than one), the agent produces a shell script (bash or PowerShell by platform), and it opens in your browser with syntax highlighting. |
+| `disk-cleanup cleanup view` | View a saved report. Lists reports in the app data dir; if multiple, prompts you to pick one, then renders it as HTML and opens in your browser. |
+
+No report yet? Run `cleanup report` first; then use `cleanup script` or `cleanup view` as needed.
+
+### REPL (interactive)
+
+Running the app **without** a `cleanup` subcommand starts an interactive REPL. You can then type:
+
+| Command | Description |
+|--------|-------------|
+| `provider add` | Add a model provider (OpenAI or Anthropic). |
+| `provider list` | List configured providers. |
+| `provider select` | Interactively select which provider to use. |
+| `provider delete <id>` | Remove a provider by id. |
+| `cleanup report` | Same as CLI: generate a cleanup report. |
+| `cleanup script` | Same as CLI: generate a cleanup script from a report. |
+| `cleanup view` | Same as CLI: view a saved report. |
+| `help` | Show available commands. |
+| `quit`, `exit` | Exit the app. |
+
+Example:
+
+```bash
+disk-cleanup
+# REPL starts; then type e.g.:
+#   provider list
+#   cleanup report
+#   exit
+```
+
 ## Release
 
 1. **Bump version** in `package.json` (e.g. `0.1.0` → `0.2.0`), or use:
