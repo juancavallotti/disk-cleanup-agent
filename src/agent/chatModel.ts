@@ -12,9 +12,15 @@ const DEFAULT_MODEL: Record<ProviderType, string> = {
   anthropic: "claude-3-5-haiku-20241022",
 };
 
+const API_KEY_MESSAGE =
+  "API key for this provider is not set. Set it in the app config (e.g. add the provider again with your API key, or edit the config file in your app config directory).";
+
 export function createChatModelFromProvider(provider: Provider): BaseChatModel {
   const modelId = provider.model?.trim() || DEFAULT_MODEL[provider.type];
-  const apiKey = provider.apiKey ?? "";
+  const apiKey = provider.apiKey?.trim();
+  if (!apiKey) {
+    throw new Error(API_KEY_MESSAGE);
+  }
 
   switch (provider.type) {
     case "openai":

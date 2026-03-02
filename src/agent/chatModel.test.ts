@@ -27,4 +27,14 @@ describe("createChatModelFromProvider", () => {
     const provider = { id: "x", type: "other", apiKey: "k" } as unknown as Provider;
     expect(() => createChatModelFromProvider(provider)).toThrow("Unsupported provider type");
   });
+
+  it("throws when provider has no API key (must use app config)", () => {
+    const provider: Provider = { id: "o1", type: "openai" };
+    expect(() => createChatModelFromProvider(provider)).toThrow("API key for this provider is not set");
+  });
+
+  it("throws when provider apiKey is empty string", () => {
+    const provider: Provider = { id: "o1", type: "openai", apiKey: "   " };
+    expect(() => createChatModelFromProvider(provider)).toThrow("API key for this provider is not set");
+  });
 });

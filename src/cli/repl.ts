@@ -9,21 +9,13 @@ import { runAddProviderWorkflow } from "./addProviderWorkflow.js";
 import { handleListProviders } from "./listProviders.js";
 import { handleDeleteProvider } from "./deleteProvider.js";
 import { handleSelectProvider } from "./selectProvider.js";
+import { getReplHelpText } from "./program.js";
+import { runCleanupReport } from "./cleanupReport.js";
+import { runCleanupClean } from "./cleanupClean.js";
+import { runCleanupReportView } from "./cleanupReportView.js";
 
 const PROMPT = "disk-cleanup> ";
 const QUIT_INPUTS = ["quit", "exit"];
-
-const HELP_TEXT = `
-Commands (by module):
-
-  provider add       Add a model provider (OpenAI or Anthropic)
-  provider list      List configured providers
-  provider select    Select the provider to use (interactive)
-  provider delete <id>  Remove a provider by id
-
-  help               Show this message
-  quit, exit         Exit the app
-`;
 
 const PROVIDER_HELP_TEXT = `
 Provider commands:
@@ -38,12 +30,8 @@ function isQuit(input: string): boolean {
   return QUIT_INPUTS.includes(input.trim().toLowerCase());
 }
 
-function showHelp(): void {
-  console.log(HELP_TEXT.trim());
-}
-
-function showProviderHelp(): void {
-  console.log(PROVIDER_HELP_TEXT.trim());
+function showHelp(context: BootstrapContext): void {
+  console.log(getReplHelpText(context));
 }
 
 export function parseLine(line: string): { command: string; args: string[] } {
@@ -75,8 +63,33 @@ export function startRepl(context: BootstrapContext): void {
       const { command, args } = parseLine(line);
       switch (command) {
         case "help":
-          showHelp();
+          showHelp(context);
           break;
+        case "cleanup": {
+          const sub = args[0]?.toLowerCase();
+          if (sub === "report") {
+            rl.pause();
+            try {
+              await runCleanupReport(context);
+            } finally {
+              rl.resume();
+            }
+          } else if (sub === "clean") {
+            runCleanupClean();
+          } else if (sub === "view") {
+            rl.pause();
+            try {
+              await runCleanupReportView(context);
+            } finally {
+              rl.resume();
+            }
+          } else if (sub) {
+            console.log("Unknown cleanup command. Type 'help' for cleanup report, clean, view.");
+          } else {
+            console.log("cleanup <report|clean|view>. Type 'help' for details.");
+          }
+          break;
+        }
         case "provider": {
           const sub = args[0]?.toLowerCase();
           if (sub === "add") {
@@ -105,7 +118,7 @@ export function startRepl(context: BootstrapContext): void {
           } else if (sub) {
             console.log("Unknown provider command. Type 'provider' for available commands.");
           } else {
-            showProviderHelp();
+            console.log(PROVIDER_HELP_TEXT.trim());
           }
           break;
         }
