@@ -15,7 +15,10 @@ describe("ConfigService", () => {
     const service = new ConfigService({ appName: "test", configDir: tempDir });
     const config = service.loadConfig();
     expect(config.providers).toEqual([]);
+    expect(config.recursionLimit).toBe(100);
     expect(existsSync(join(tempDir, "config.yaml"))).toBe(true);
+    const raw = readFileSync(join(tempDir, "config.yaml"), "utf-8");
+    expect(raw).toContain("recursionLimit");
   });
 
   it("loads existing config from disk", () => {
@@ -35,5 +38,17 @@ describe("ConfigService", () => {
     const raw = readFileSync(join(tempDir, "config.yaml"), "utf-8");
     expect(raw).toContain("p2");
     expect(raw).toContain("anthropic");
+  });
+
+  it("loads and persists recursionLimit", () => {
+    const service = new ConfigService({ appName: "test", configDir: tempDir });
+    service.loadConfig();
+    expect(service.getConfig().recursionLimit).toBe(100);
+    service.updateConfig((c) => {
+      c.recursionLimit = 150;
+    });
+    const service2 = new ConfigService({ appName: "test", configDir: tempDir });
+    const config = service2.loadConfig();
+    expect(config.recursionLimit).toBe(150);
   });
 });

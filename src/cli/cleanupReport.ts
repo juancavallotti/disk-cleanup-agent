@@ -22,7 +22,7 @@ const PLAN_PROMPT = `You are planning a disk cleanup. Output ONLY an execution p
 List which directories you will inspect (only user locations: home, caches in home—never system folders like /System, /Library, /usr). One bullet per step, in order. Keep it short and concrete. No other text.`;
 
 const REPORT_TASK =
-  "Generate a disk cleanup report. First output your game plan (which directories you will inspect, only user locations—never system folders). Then execute the plan using your tools. Use get_folder_capacity_batch when measuring multiple paths. For each location that is safe to clean, call report_cleanup_opportunity with path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, and optional suggestedAction. When done, summarize.";
+  "Generate a disk cleanup report. First output your game plan (which directories you will inspect, only user locations—never system folders). Then execute the plan using your tools. Use get_folder_capacity_batch when measuring multiple paths. For locations that are safe to clean, call report_cleanup_opportunity with opportunities: an array of { path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, optional suggestedAction }; you may pass one or many per call—prefer batching when you have multiple findings. When done, summarize.";
 
 const YN_VALIDATE = (v: string): true | string => {
   const lower = v.trim().toLowerCase();
@@ -75,12 +75,14 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     },
   };
 
+  const recursionLimit = configService.getConfig().recursionLimit ?? 100;
+
   console.log("\nGenerating execution plan...\n");
 
   const graph = agent.getGraph(accumulator);
   const planStream = await graph.stream(
     { messages: [new HumanMessage(PLAN_PROMPT)] },
-    { streamMode: "values" }
+    { streamMode: "values", recursionLimit }
   );
   const planResult = await consumeStreamWithTwoLines(planStream);
   const planPhaseMessages = planResult.messages;
@@ -112,7 +114,6 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     lastChunk: null,
     toolProgress: null,
     done: false,
-    lastChunkTime: Date.now(),
   };
   const executionGraph = agent.getGraph(accumulator, {
     thinkingStreamWriter: (text) => {
@@ -121,7 +122,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   });
   const stream = await executionGraph.stream(
     { messages: [...planPhaseMessages, new HumanMessage(executionMessage)] },
-    { streamMode: "values" }
+    { streamMode: ["values", "messages"], recursionLimit }
   );
 
   let aborted = false;

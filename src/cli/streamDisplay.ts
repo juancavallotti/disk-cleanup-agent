@@ -12,9 +12,6 @@ const CLEAR_LINE = "\r\x1b[K";
 const MOVE_UP = "\x1b[1A";
 
 const COORDINATOR_POLL_MS = 50;
-const THINKING_IDLE_MS = 10_000;
-const THINKING_DOT_INTERVAL_MS = 400;
-const THINKING_DOTS = [".", "..", "..."] as const;
 
 /** Shared state between stream task and coordinator: latest chunk, optional tool progress, and stream completion. */
 export interface StreamSharedState {
@@ -23,8 +20,8 @@ export interface StreamSharedState {
   toolProgress: string | null;
   done: boolean;
   aborted?: boolean;
-  /** Timestamp when lastChunk was last updated (for idle animation after 10s without tokens). */
-  lastChunkTime?: number;
+  /** Accumulated LLM token stream for the current turn (cleared on values update). Shown as line 2 when set. */
+  streamedText?: string;
 }
 
 /** Clear the two-line stream area and move cursor to a fresh line. Call before showing a user prompt. */
@@ -76,10 +73,11 @@ export interface RunStreamTaskOptions {
 
 /**
  * Consume the graph stream in the background; update sharedState.lastChunk and set done when finished.
- * Used with runCoordinatorLoop so the coordinator can show thinking vs drain the queue.
+ * Supports streamMode "values" (chunk = state) or ["values", "messages"] (chunk = [mode, data]).
+ * When "messages" mode is used, LLM tokens are accumulated in sharedState.streamedText.
  */
 export async function runStreamTask(
-  stream: AsyncIterable<{ messages?: BaseMessage[] }>,
+  stream: AsyncIterable<unknown>,
   sharedState: StreamSharedState,
   options: RunStreamTaskOptions = {}
 ): Promise<void> {
@@ -96,12 +94,33 @@ export async function runStreamTask(
 
   process.on("SIGINT", handler);
   try {
-    for await (const chunk of stream) {
+    for await (const item of stream) {
       if (sharedState.aborted) break;
-      if (chunk?.messages) {
-        sharedState.lastChunk = { messages: chunk.messages };
-        sharedState.lastChunkTime = Date.now();
+      // Multi-mode: [mode, chunk]
+      if (Array.isArray(item) && item.length === 2 && typeof item[0] === "string") {
+        const [mode, data] = item;
+        if (mode === "values") {
+          const state = data as { messages?: BaseMessage[] };
+          if (state?.messages) {
+            sharedState.lastChunk = { messages: state.messages };
+            sharedState.toolProgress = null;
+            sharedState.streamedText = "";
+          }
+        } else if (mode === "messages") {
+          const [messageChunk] = data as [BaseMessage, Record<string, unknown>];
+          const content = (messageChunk as { content?: string }).content;
+          if (typeof content === "string" && content) {
+            sharedState.streamedText = (sharedState.streamedText ?? "") + content;
+          }
+        }
+        continue;
+      }
+      // Single-mode "values": chunk is state directly
+      const state = item as { messages?: BaseMessage[] };
+      if (state?.messages) {
+        sharedState.lastChunk = { messages: state.messages };
         sharedState.toolProgress = null;
+        sharedState.streamedText = "";
       }
     }
   } finally {
@@ -128,9 +147,6 @@ export async function runCoordinatorLoop(
   const { onAbort } = options;
   let line1 = "";
   let line2 = "";
-  let dotFrame = 0;
-  let lastDotStep = 0;
-  let idleAnimationShown = false;
   let currentRequest: PendingRequest | undefined;
 
   const restore = (): void => {
@@ -174,41 +190,17 @@ export async function runCoordinatorLoop(
 
       const messages = sharedState.lastChunk?.messages ?? [];
       const tool = getLastToolFromMessages(messages);
-      const inThinkingMode =
-        !sharedState.done && tool === null;
-      const lastChunkTime = sharedState.lastChunkTime ?? 0;
-      const noTokensFor10s = Date.now() - lastChunkTime > THINKING_IDLE_MS;
-      const showIdleAnimation = inThinkingMode && noTokensFor10s;
+      const inThinkingMode = !sharedState.done && tool === null;
 
-      if (showIdleAnimation) {
-        const now = Date.now();
-        if (lastDotStep === 0) {
-          lastDotStep = now;
-        } else if (now - lastDotStep >= THINKING_DOT_INTERVAL_MS) {
-          lastDotStep = now;
-          dotFrame = (dotFrame + 1) % THINKING_DOTS.length;
-        }
-        const newLine1 = "Thinking";
-        const newLine2 = THINKING_DOTS[dotFrame];
-        if (!idleAnimationShown) {
-          clearStreamArea();
-          process.stdout.write(newLine1 + "\n" + newLine2);
-          process.stdout.write(MOVE_UP + MOVE_UP);
-          idleAnimationShown = true;
-          line1 = newLine1;
-          line2 = newLine2;
-        } else if (newLine1 !== line1 || newLine2 !== line2) {
-          line1 = newLine1;
-          line2 = newLine2;
-          process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
-          process.stdout.write(MOVE_UP + MOVE_UP);
-        }
-      } else {
-        idleAnimationShown = false;
-        if (sharedState.lastChunk || sharedState.toolProgress !== null) {
-        const content = sharedState.toolProgress ?? getLastContent(messages);
+      if (sharedState.lastChunk || sharedState.toolProgress !== null || (sharedState.streamedText ?? "")) {
+        const rawContent =
+          sharedState.toolProgress ??
+          (sharedState.streamedText && sharedState.streamedText.trim()
+            ? sharedState.streamedText
+            : getLastContent(messages));
         const maxContent = 80;
-        const newLine2 = (content.length <= maxContent ? content : content.slice(0, maxContent) + "...") || " ";
+        const newLine2 =
+          (rawContent.length <= maxContent ? rawContent : "…" + rawContent.slice(-(maxContent - 1))) || " ";
         const newLine1 = tool ? `Tool: ${tool}` : "Thinking...";
         if (newLine1 !== line1 || newLine2 !== line2) {
           line1 = newLine1;
@@ -216,7 +208,15 @@ export async function runCoordinatorLoop(
           process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
           process.stdout.write(MOVE_UP + MOVE_UP);
         }
-      }
+      } else if (inThinkingMode) {
+        const newLine1 = "Thinking...";
+        const newLine2 = " ";
+        if (newLine1 !== line1 || newLine2 !== line2) {
+          line1 = newLine1;
+          line2 = newLine2;
+          process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
+          process.stdout.write(MOVE_UP + MOVE_UP);
+        }
       }
       await new Promise((r) => setTimeout(r, COORDINATOR_POLL_MS));
     }

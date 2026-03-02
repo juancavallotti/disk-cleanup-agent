@@ -18,4 +18,6 @@ export const TOOL_AUTHORIZATION_STATUS_KEY = "toolAuthorizationStatus";
 
 export interface AppConfig {
   providers: Provider[];
+  /** Max agent graph steps per run (plan + execution). Default 100. */
+  recursionLimit?: number;
 }

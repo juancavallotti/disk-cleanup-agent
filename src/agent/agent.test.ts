@@ -6,8 +6,9 @@ import { StateService } from "@/system/stateService.js";
 import { ConfigService } from "@/system/configService.js";
 import { ProviderService } from "@/services/providerService.js";
 import { createAllowlistMiddleware } from "./allowlistMiddleware.js";
-import { createAgent } from "./agent.js";
+import { createAgent, getExtraToolsForReport } from "./agent.js";
 import { SELECTED_PROVIDER_ID_KEY } from "@/system/types.js";
+import type { Provider } from "@/system/types.js";
 
 describe("createAgent", () => {
   let stateService: StateService;
@@ -52,5 +53,23 @@ describe("createAgent", () => {
     const agent = createAgent({ stateService, providerService, allowlistMiddleware });
     const p = agent.getProvider();
     expect(p.id).toBe("openai-1");
+  });
+
+  it("getExtraToolsForReport includes web search for OpenAI provider", () => {
+    const openaiProvider: Provider = { id: "o1", type: "openai", apiKey: "sk-x" };
+    const accumulator = { push: () => {} };
+    const extra = getExtraToolsForReport(openaiProvider, accumulator);
+    expect(extra.length).toBe(2);
+    const webSearchTool = extra.find((t) => (t as { type?: string }).type === "web_search");
+    expect(webSearchTool).toBeDefined();
+  });
+
+  it("getExtraToolsForReport does not include web search for Anthropic provider", () => {
+    const anthropicProvider: Provider = { id: "a1", type: "anthropic", apiKey: "sk-ant-x" };
+    const accumulator = { push: () => {} };
+    const extra = getExtraToolsForReport(anthropicProvider, accumulator);
+    expect(extra.length).toBe(1);
+    const webSearchTool = extra.find((t) => (t as { type?: string }).type === "web_search");
+    expect(webSearchTool).toBeUndefined();
   });
 });

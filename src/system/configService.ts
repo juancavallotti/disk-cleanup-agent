@@ -15,8 +15,10 @@ function getConfigPath(configDir: string): string {
   return join(configDir, CONFIG_FILENAME);
 }
 
+const DEFAULT_RECURSION_LIMIT = 100;
+
 function defaultConfig(): AppConfig {
-  return { providers: [] };
+  return { providers: [], recursionLimit: DEFAULT_RECURSION_LIMIT };
 }
 
 export interface ConfigServiceOptions {
@@ -51,8 +53,11 @@ export class ConfigService {
     }
     const raw = readFileSync(path, "utf-8");
     const parsed = YAML.parse(raw) as Partial<AppConfig> | null;
+    const limit = parsed?.recursionLimit;
     this.config = {
       providers: Array.isArray(parsed?.providers) ? parsed.providers : [],
+      recursionLimit:
+        typeof limit === "number" && Number.isInteger(limit) && limit > 0 ? limit : DEFAULT_RECURSION_LIMIT,
     };
     return this.config;
   }
