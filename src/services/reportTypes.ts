@@ -10,12 +10,16 @@ export interface CleanupOpportunity {
   contentsDescription: string;
   whySafeToDelete: string;
   suggestedAction?: string;
+  /** Recommended shell command to run for this item (e.g. `npm cache clean --force`). */
+  recommendedCommand?: string;
 }
 
 export interface CleanupReport {
   generatedAt: string;
   system: string;
   backupWarning: string;
+  /** Model that produced the report (e.g. gpt-4o-mini, claude-3-5-haiku). */
+  model?: string;
   opportunities: CleanupOpportunity[];
 }
 

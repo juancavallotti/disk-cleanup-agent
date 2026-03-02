@@ -1,11 +1,12 @@
 /**
  * Transform script path + content to HTML for browser display with syntax highlighting.
- * Uses Tailwind and Prism.js from CDN.
+ * Uses Tailwind, Prism.js, and Hero Icons from CDN.
  */
 
 const TAILWIND_CDN = "https://cdn.tailwindcss.com";
 const PRISM_JS = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js";
 const PRISM_CSS = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css";
+const HERO_ICONS_CDN = "https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline";
 
 export type ShellType = "mac" | "windows" | "linux";
 
@@ -36,6 +37,7 @@ export function scriptToHtml(input: ScriptViewInput): string {
   const pathEsc = escapeHtml(scriptPath);
   const contentEsc = escapeHtml(scriptContent);
   const lang = prismLanguage(shellType);
+  const clipboardIcon = `${HERO_ICONS_CDN}/clipboard-document.svg`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -53,7 +55,9 @@ export function scriptToHtml(input: ScriptViewInput): string {
       <p class="mt-2 text-sm text-gray-600">Script path (copy to run in your shell):</p>
       <div class="mt-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono text-sm">
         <code id="script-path" class="flex-1 break-all text-gray-800">${pathEsc}</code>
-        <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('script-path').textContent); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy', 1500)" class="shrink-0 rounded bg-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-300">Copy</button>
+        <button type="button" id="script-path-copy" aria-label="Copy path" title="Copy to clipboard" class="shrink-0 rounded p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-700">
+          <img src="${clipboardIcon}" alt="" class="h-5 w-5" />
+        </button>
       </div>
     </header>
 
@@ -65,6 +69,21 @@ export function scriptToHtml(input: ScriptViewInput): string {
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-powershell.min.js"></script>
   <script>Prism.highlightAll();</script>
+  <script>
+    (function() {
+      var btn = document.getElementById('script-path-copy');
+      var target = document.getElementById('script-path');
+      if (!btn || !target) return;
+      var origHtml = btn.innerHTML;
+      btn.addEventListener('click', function() {
+        navigator.clipboard.writeText(target.textContent || '').then(function() {
+          btn.innerHTML = '<span class="text-xs font-medium text-green-600">Copied!</span>';
+          btn.disabled = true;
+          setTimeout(function() { btn.innerHTML = origHtml; btn.disabled = false; }, 1500);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }

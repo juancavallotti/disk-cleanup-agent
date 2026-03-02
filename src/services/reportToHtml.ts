@@ -1,11 +1,12 @@
 /**
  * Transform CleanupReport to HTML for browser display. Pure functions only; no I/O.
- * Uses Tailwind CSS via CDN. Formats file sizes in human-readable form.
+ * Uses Tailwind CSS and Hero Icons via CDN. Formats file sizes in human-readable form.
  */
 
 import type { CleanupReport, CleanupOpportunity } from "./reportTypes.js";
 
 const TAILWIND_CDN = "https://cdn.tailwindcss.com";
+const HERO_ICONS_CDN = "https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline";
 
 /** Escape HTML special chars for safe text content. */
 function escapeHtml(s: string): string {
@@ -55,14 +56,33 @@ function formatGeneratedAt(iso: string): string {
 
 /**
  * Render a single opportunity as HTML (card section).
+ * Uses index for unique copy-target ids.
  */
-function opportunityToHtml(opp: CleanupOpportunity): string {
+function opportunityToHtml(opp: CleanupOpportunity, index: number): string {
   const size = formatBytes(opp.sizeBytes);
   const pathEsc = escapeHtml(opp.path);
   const pathDescEsc = escapeHtml(opp.pathDescription);
   const contentsEsc = escapeHtml(opp.contentsDescription);
   const whyEsc = escapeHtml(opp.whySafeToDelete);
   const actionEsc = opp.suggestedAction ? escapeHtml(opp.suggestedAction) : null;
+  const cmdEsc = opp.recommendedCommand ? escapeHtml(opp.recommendedCommand) : null;
+  const copyId = `cmd-${index}`;
+  const copyBtnId = `copy-btn-${index}`;
+  const clipboardIcon = `${HERO_ICONS_CDN}/clipboard-document.svg`;
+
+  const commandBlock =
+    cmdEsc === null
+      ? ""
+      : `
+      <div class="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+        <p class="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Recommended command</p>
+        <div class="flex items-center gap-2">
+          <code id="${copyId}" class="flex-1 break-all text-sm text-gray-800">${cmdEsc}</code>
+          <button type="button" aria-label="Copy command" id="${copyBtnId}" class="shrink-0 rounded p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-700" title="Copy to clipboard">
+            <img src="${clipboardIcon}" alt="" class="h-5 w-5" />
+          </button>
+        </div>
+      </div>`;
 
   let html = `
     <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -76,6 +96,7 @@ function opportunityToHtml(opp: CleanupOpportunity): string {
         <p class="mt-1 text-sm text-gray-700"><span class="font-medium">Why safe to delete:</span> ${whyEsc}</p>
         ${actionEsc ? `<p class="mt-1 text-sm text-green-700"><span class="font-medium">Suggested action:</span> ${actionEsc}</p>` : ""}
       </div>
+      ${commandBlock}
     </section>`;
   return html.trim();
 }
@@ -88,9 +109,16 @@ export function reportToHtml(report: CleanupReport): string {
   const title = "Disk Cleanup Report";
   const warningEsc = escapeHtml(report.backupWarning ?? "");
   const systemEsc = escapeHtml(report.system ?? "");
+  const modelEsc = report.model ? escapeHtml(report.model) : null;
   const generatedEsc = escapeHtml(formatGeneratedAt(report.generatedAt));
   const opportunities = report.opportunities ?? [];
-  const cardsHtml = opportunities.map(opportunityToHtml).join("\n");
+  const sorted = [...opportunities].sort((a, b) => b.sizeBytes - a.sizeBytes);
+  const cardsHtml = sorted.map((opp, i) => opportunityToHtml(opp, i)).join("\n");
+
+  const metaLine =
+    modelEsc === null
+      ? `Generated: ${generatedEsc} · System: ${systemEsc}`
+      : `Generated: ${generatedEsc} · System: ${systemEsc} · Model: ${modelEsc}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -104,7 +132,7 @@ export function reportToHtml(report: CleanupReport): string {
   <div class="mx-auto max-w-4xl px-4 py-8">
     <header class="mb-8">
       <h1 class="text-2xl font-bold text-gray-900">${escapeHtml(title)}</h1>
-      <p class="mt-1 text-sm text-gray-500">Generated: ${generatedEsc} · System: ${systemEsc}</p>
+      <p class="mt-1 text-sm text-gray-500">${metaLine}</p>
     </header>
 
     <div class="mb-8 rounded-lg border border-amber-200 bg-amber-50 p-4" role="alert">
@@ -116,6 +144,22 @@ export function reportToHtml(report: CleanupReport): string {
 ${cardsHtml ? "      " + cardsHtml.split("\n").join("\n      ") : '      <p class="text-sm text-gray-500">No opportunities recorded.</p>'}
     </div>
   </div>
+  <script>
+    document.querySelectorAll('[id^="copy-btn-"]').forEach(function(btn) {
+      var id = btn.id;
+      var idx = id.replace('copy-btn-', '');
+      var target = document.getElementById('cmd-' + idx);
+      if (!target) return;
+      btn.addEventListener('click', function() {
+        navigator.clipboard.writeText(target.textContent || '').then(function() {
+          var orig = btn.innerHTML;
+          btn.innerHTML = '<span class="text-xs font-medium text-green-600">Copied!</span>';
+          btn.disabled = true;
+          setTimeout(function() { btn.innerHTML = orig; btn.disabled = false; }, 1500);
+        });
+      });
+    });
+  </script>
 </body>
 </html>`;
 }

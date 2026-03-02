@@ -25,6 +25,26 @@ describe("createReportCleanupOpportunityTool", () => {
     expect(collected[0].whySafeToDelete).toBe("Regenerated on next run");
   });
 
+  it("stores recommendedCommand when provided", async () => {
+    const collected: CleanupOpportunity[] = [];
+    const accumulator = { push: (o: CleanupOpportunity) => collected.push(o) };
+    const tool = createReportCleanupOpportunityTool(accumulator);
+    await tool.invoke({
+      opportunities: [
+        {
+          path: "/home/user/.npm",
+          pathDescription: "npm cache",
+          sizeBytes: 50000,
+          contentsDescription: "npm cache",
+          whySafeToDelete: "Reinstall on next npm install",
+          recommendedCommand: "npm cache clean --force",
+        },
+      ],
+    });
+    expect(collected).toHaveLength(1);
+    expect(collected[0].recommendedCommand).toBe("npm cache clean --force");
+  });
+
   it("pushes multiple opportunities in one call (batch)", async () => {
     const collected: CleanupOpportunity[] = [];
     const accumulator = { push: (o: CleanupOpportunity) => collected.push(o) };

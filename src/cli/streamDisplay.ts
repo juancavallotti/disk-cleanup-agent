@@ -112,7 +112,8 @@ export async function runStreamTask(
           const [messageChunk] = data as [BaseMessage, Record<string, unknown>];
           const content = (messageChunk as { content?: string }).content;
           if (typeof content === "string" && content) {
-            sharedState.streamedText = (sharedState.streamedText ?? "") + content;
+            const noNewlines = content.replace(/\r\n|\r|\n/g, " ");
+            sharedState.streamedText = (sharedState.streamedText ?? "") + noNewlines;
           }
         }
         continue;
@@ -197,11 +198,12 @@ export async function runCoordinatorLoop(
       const inThinkingMode = !sharedState.done && tool === null;
 
       if (sharedState.lastChunk || sharedState.toolProgress !== null || (sharedState.streamedText ?? "")) {
-        const rawContent =
+        let rawContent =
           sharedState.toolProgress ??
           (sharedState.streamedText && sharedState.streamedText.trim()
             ? sharedState.streamedText
             : getLastContent(messages));
+        rawContent = rawContent.replace(/\r\n|\r|\n/g, " ");
         const maxContent = 80;
         const newLine2 =
           (rawContent.length <= maxContent ? rawContent : "…" + rawContent.slice(-(maxContent - 1))) || " ";

@@ -7,10 +7,15 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import type { Provider, ProviderType } from "@/system/types.js";
 
-const DEFAULT_MODEL: Record<ProviderType, string> = {
+export const DEFAULT_MODEL: Record<ProviderType, string> = {
   openai: "gpt-5-mini",
   anthropic: "claude-haiku-4-5",
 };
+
+/** Resolve the model id used for a provider (override or default). */
+export function getModelId(provider: Provider): string {
+  return provider.model?.trim() || DEFAULT_MODEL[provider.type];
+}
 
 const API_KEY_MESSAGE =
   "API key for this provider is not set. Set it in the app config or in .env (OPENAI_API_KEY / OPENAI_TOKEN for OpenAI, ANTHROPIC_API_KEY for Anthropic).";
@@ -32,7 +37,7 @@ function resolveAnthropicKey(provider: Provider): string {
 }
 
 export function createChatModelFromProvider(provider: Provider): BaseChatModel {
-  const modelId = provider.model?.trim() || DEFAULT_MODEL[provider.type];
+  const modelId = getModelId(provider);
 
   switch (provider.type) {
     case "openai": {

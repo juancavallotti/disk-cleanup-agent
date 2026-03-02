@@ -61,4 +61,60 @@ describe("reportToHtml", () => {
     expect(html).toContain("No opportunities recorded.");
     expect(html).toContain("Cleanup opportunities (0)");
   });
+
+  it("includes model in header when present", () => {
+    const report: CleanupReport = {
+      generatedAt: "2025-03-01T12:00:00.000Z",
+      system: "darwin",
+      backupWarning: "Back up first.",
+      model: "gpt-4o-mini",
+      opportunities: [],
+    };
+    const html = reportToHtml(report);
+    expect(html).toContain("Model: gpt-4o-mini");
+  });
+
+  it("renders recommendedCommand in card with copy icon", () => {
+    const report: CleanupReport = {
+      generatedAt: "2025-03-01T12:00:00.000Z",
+      system: "darwin",
+      backupWarning: "Back up first.",
+      opportunities: [
+        {
+          path: "/Users/me/.npm",
+          pathDescription: "npm cache",
+          sizeBytes: 1024,
+          contentsDescription: "npm cache",
+          whySafeToDelete: "Safe to clear",
+          recommendedCommand: "npm cache clean --force",
+        },
+      ],
+    };
+    const html = reportToHtml(report);
+    expect(html).toContain("Recommended command");
+    expect(html).toContain("npm cache clean --force");
+    expect(html).toContain("heroicons@2.2.0/24/outline/clipboard-document.svg");
+  });
+
+  it("renders opportunities biggest to smallest by sizeBytes", () => {
+    const report: CleanupReport = {
+      generatedAt: "2025-03-01T12:00:00.000Z",
+      system: "darwin",
+      backupWarning: "Back up first.",
+      opportunities: [
+        { path: "/small", pathDescription: "Small", sizeBytes: 100, contentsDescription: "x", whySafeToDelete: "y" },
+        { path: "/big", pathDescription: "Big", sizeBytes: 5000, contentsDescription: "x", whySafeToDelete: "y" },
+        { path: "/medium", pathDescription: "Medium", sizeBytes: 500, contentsDescription: "x", whySafeToDelete: "y" },
+      ],
+    };
+    const html = reportToHtml(report);
+    const idxLargest = html.indexOf("4.9 KB"); // 5000 bytes
+    const idxMedium = html.indexOf("500 B");
+    const idxSmallest = html.indexOf("100 B");
+    expect(idxLargest).toBeGreaterThan(-1);
+    expect(idxMedium).toBeGreaterThan(-1);
+    expect(idxSmallest).toBeGreaterThan(-1);
+    expect(idxLargest).toBeLessThan(idxMedium);
+    expect(idxMedium).toBeLessThan(idxSmallest);
+  });
 });

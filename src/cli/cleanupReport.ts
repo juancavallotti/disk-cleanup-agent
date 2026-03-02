@@ -16,6 +16,7 @@ import type { CleanupReport, CleanupOpportunity } from "@/services/reportTypes.j
 import { DEFAULT_BACKUP_WARNING } from "@/services/reportTypes.js";
 import { ReportService } from "@/services/reportService.js";
 import { getPlatformName } from "@/agent/tools/systemPaths.js";
+import { getModelId } from "@/agent/chatModel.js";
 
 const PLAN_PROMPT = `The user requested a cleanup report. Call the skills tool with skill name "report" to load the task instructions. Then output ONLY an execution plan as ASCII bullet points: list which directories you will inspect (only user locations—never system folders like /System, /Library, /usr). One bullet per step, in order. Do not use any other tools yet.`;
 
@@ -60,10 +61,12 @@ function getPlanTextFromMessages(messages: BaseMessage[]): string {
 export async function runCleanupReport(context: BootstrapContext): Promise<void> {
   const { agent, configService, userInputQueue } = context;
 
+  const provider = agent.getProvider();
   const report: CleanupReport = {
     generatedAt: new Date().toISOString(),
     system: getPlatformName(),
     backupWarning: DEFAULT_BACKUP_WARNING,
+    model: getModelId(provider),
     opportunities: [],
   };
 

@@ -13,6 +13,7 @@ describe("scriptToHtml", () => {
     expect(html).toContain("rm -rf");
     expect(html).toContain("language-bash");
     expect(html).toContain("Prism");
+    expect(html).toContain("heroicons@2.2.0/24/outline/clipboard-document.svg");
   });
 
   it("uses powershell language for windows shellType", () => {
