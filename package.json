@@ -8,8 +8,8 @@
     "disk-cleanup": "./dist/index.js"
   },
   "scripts": {
-    "dev": "NODE_OPTIONS='--import ./scripts/register-md.mjs' tsx src/index.ts",
-    "dev:watch": "NODE_OPTIONS='--import ./scripts/register-md.mjs' tsx watch src/index.ts",
+    "dev": "ENV=dev NODE_OPTIONS='--import ./scripts/register-md.mjs' tsx src/index.ts",
+    "dev:watch": "ENV=dev NODE_OPTIONS='--import ./scripts/register-md.mjs' tsx watch src/index.ts",
     "build": "tsc && tsc-alias -p tsconfig.json && node scripts/copy-skills.mjs",
     "start": "node --import ./scripts/register-md.mjs dist/index.js",
     "test": "vitest",

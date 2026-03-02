@@ -178,3 +178,33 @@ npm run test:run
 - **`src/cli/`** — Commander commands; one command per file.
 - **`src/services/`** — Domain/business logic; used by system and tools.
 - **`src/agent/`** — Agent and `src/agent/tools/`; tools are wired by the system layer.
+
+## Troubleshooting
+
+On startup, the app prints the current process id and a ready-to-copy command:
+
+```bash
+Stack dump command: kill -SIGUSR2 <PID>
+```
+
+Run the printed command to force a stack dump from the running process.
+
+In development mode (`npm run dev` / `npm run dev:watch`, where `ENV=dev`), pressing `Ctrl+C` also prints a stack dump before exiting.
+
+Settings are stored in:
+
+```bash
+~/.disk-cleanup/state.json
+```
+
+To clear only the tool allow list prompts, edit `~/.disk-cleanup/state.json` and remove these keys:
+
+- `toolAllowlist`
+- `toolAllowedArgs`
+
+To reset all app settings (providers, selected provider, allow list, and other saved state), delete the state file:
+
+```bash
+rm ~/.disk-cleanup/state.json
+```
+
