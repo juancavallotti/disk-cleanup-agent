@@ -1,5 +1,5 @@
 /**
- * Agent: ReAct agent via LangGraph createReactAgent, with allowlist middleware and optional report accumulator.
+ * Agent: ReAct agent via langchain createAgent, with allowlist middleware and optional report accumulator.
  */
 
 import { HumanMessage } from "@langchain/core/messages";
@@ -9,7 +9,7 @@ import type { AllowlistMiddleware } from "./allowlistMiddleware.js";
 import { createChatModelFromProvider } from "./chatModel.js";
 import { SELECTED_PROVIDER_ID_KEY } from "@/system/types.js";
 import type { Provider } from "@/system/types.js";
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { createAgent as createLangchainAgent } from "langchain";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { ReportAccumulator } from "./tools/reportCleanupOpportunity.js";
 import {
@@ -65,7 +65,7 @@ export interface DiskCleanupAgent {
   getProvider(): Provider;
   getChatModel(): ReturnType<typeof createChatModelFromProvider>;
   /** Build the ReAct graph for report run. If reportAccumulator is provided, includes report_cleanup_opportunity tool. */
-  getGraph(reportAccumulator?: ReportAccumulator, options?: GetGraphOptions): ReturnType<typeof createReactAgent>;
+  getGraph(reportAccumulator?: ReportAccumulator, options?: GetGraphOptions): ReturnType<typeof createLangchainAgent>;
   /** Legacy: run one turn (no tools). Prefer getGraph().stream() for report flow. */
   invoke(threadId: string, userContent: string): Promise<string>;
 }
@@ -106,13 +106,13 @@ export function createAgent(options: DiskCleanupAgentOptions): DiskCleanupAgent 
         ? [...baseTools, createReportCleanupOpportunityTool(reportAccumulator)]
         : baseTools;
 
-      const graph = createReactAgent({
-        llm: model,
+      const agent = createLangchainAgent({
+        model,
         tools,
-        prompt: SYSTEM_PROMPT,
+        systemPrompt: SYSTEM_PROMPT,
       });
 
-      return graph;
+      return agent;
     },
 
     async invoke(threadId: string, userContent: string): Promise<string> {
