@@ -9,22 +9,13 @@ import { runAddProviderWorkflow } from "./addProviderWorkflow.js";
 import { handleListProviders } from "./listProviders.js";
 import { handleDeleteProvider } from "./deleteProvider.js";
 import { handleSelectProvider } from "./selectProvider.js";
-import { getReplHelpText } from "./program.js";
+import { getReplHelpText, getProviderHelpSection } from "./program.js";
 import { runCleanupReport } from "./cleanupReport.js";
 import { runCleanupScript } from "./cleanupScript.js";
 import { runCleanupReportView } from "./cleanupReportView.js";
 
 const PROMPT = "disk-cleanup> ";
 const QUIT_INPUTS = ["quit", "exit"];
-
-const PROVIDER_HELP_TEXT = `
-Provider commands:
-
-  provider add         Add a model provider (OpenAI or Anthropic)
-  provider list        List configured providers
-  provider select      Select the provider to use (interactive)
-  provider delete [id] Remove a provider (interactive if no id)
-`;
 
 function isQuit(input: string): boolean {
   return QUIT_INPUTS.includes(input.trim().toLowerCase());
@@ -129,7 +120,7 @@ export function startRepl(context: BootstrapContext): void {
           } else if (sub) {
             console.log("Unknown provider command. Type 'provider' for available commands.");
           } else {
-            console.log(PROVIDER_HELP_TEXT.trim());
+            console.log("Provider commands:\n\n" + getProviderHelpSection(context));
           }
           break;
         }
