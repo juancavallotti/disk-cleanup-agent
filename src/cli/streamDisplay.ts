@@ -8,6 +8,18 @@ import type { BaseMessage } from "@langchain/core/messages";
 const CLEAR_LINE = "\r\x1b[K";
 const MOVE_UP = "\x1b[1A";
 
+/** Clear the two-line stream area and move cursor to a fresh line. Call before showing a user prompt. */
+export function clearStreamArea(): void {
+  process.stdout.write(CLEAR_LINE);
+  process.stdout.write(MOVE_UP + CLEAR_LINE);
+  process.stdout.write("\n");
+}
+
+/** Print a blank line before resuming the two-line stream display (call after user answers). */
+export function prepareForStreamResume(): void {
+  process.stdout.write("\n");
+}
+
 function getLastToolFromMessages(messages: BaseMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -54,9 +66,7 @@ export async function consumeStreamWithTwoLines(
   let interrupted = false;
 
   const restore = (): void => {
-    process.stdout.write(CLEAR_LINE);
-    process.stdout.write(MOVE_UP + CLEAR_LINE);
-    process.stdout.write("\n");
+    clearStreamArea();
   };
 
   const update = (): void => {

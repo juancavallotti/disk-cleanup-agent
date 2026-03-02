@@ -14,9 +14,16 @@ export interface AuthorizationRecord {
   timestamp: string;
 }
 
+export interface StreamDisplayCallbacks {
+  onBeforeUserInput(): void;
+  onAfterUserInput(): void;
+}
+
 export interface AllowlistMiddlewareOptions {
   /** Optional: custom prompt for human-in-the-loop; default prompts via inquirer. */
   promptForAuthorization?: (toolName: string, args: unknown) => Promise<boolean>;
+  /** Optional: when set, called before showing the allow prompt (e.g. clear stream area) and after user answers (e.g. blank line before resuming stream). */
+  getStreamDisplayCallbacks?: () => StreamDisplayCallbacks | null;
 }
 
 export interface AllowlistMiddleware {
@@ -45,6 +52,7 @@ export function createAllowlistMiddleware(
   options: AllowlistMiddlewareOptions = {}
 ): AllowlistMiddleware {
   const promptForAuthorization = options.promptForAuthorization ?? defaultPromptForAuthorization;
+  const getStreamDisplayCallbacks = options.getStreamDisplayCallbacks;
 
   function getAllowlist(): string[] {
     const state = stateService.getState();
@@ -73,7 +81,10 @@ export function createAllowlistMiddleware(
     getAllowlist,
 
     async requestToolAuthorization(toolName: string, args: unknown): Promise<boolean> {
+      const callbacks = getStreamDisplayCallbacks?.() ?? null;
+      callbacks?.onBeforeUserInput();
       const allowed = await promptForAuthorization(toolName, args);
+      callbacks?.onAfterUserInput();
       const record: AuthorizationRecord = {
         toolName,
         args,

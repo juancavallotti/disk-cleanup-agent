@@ -4,7 +4,11 @@
 
 import { HumanMessage } from "@langchain/core/messages";
 import type { BootstrapContext } from "@/system/bootstrap.js";
-import { consumeStreamWithTwoLines } from "./streamDisplay.js";
+import {
+  consumeStreamWithTwoLines,
+  clearStreamArea,
+  prepareForStreamResume,
+} from "./streamDisplay.js";
 import type { ReportAccumulator } from "@/agent/tools/reportCleanupOpportunity.js";
 import type { CleanupReport, CleanupOpportunity } from "@/services/reportTypes.js";
 import { DEFAULT_BACKUP_WARNING } from "@/services/reportTypes.js";
@@ -15,12 +19,24 @@ const REPORT_TASK =
   "Generate a disk cleanup report. First output your game plan (which directories you will inspect, only user locations—never system folders). Then execute the plan using your tools. Use get_folder_capacity_batch when measuring multiple paths. For each location that is safe to clean, call report_cleanup_opportunity with path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, and optional suggestedAction. When done, summarize.";
 
 export async function runCleanupReport(context: BootstrapContext): Promise<void> {
-  const { agent, configService } = context;
-  const opportunities: CleanupOpportunity[] = [];
+  const { agent, configService, streamDisplayCallbacksRef } = context;
+
+  const report: CleanupReport = {
+    generatedAt: new Date().toISOString(),
+    system: getPlatformName(),
+    backupWarning: DEFAULT_BACKUP_WARNING,
+    opportunities: [],
+  };
+
   const accumulator: ReportAccumulator = {
     push(opp: CleanupOpportunity) {
-      opportunities.push(opp);
+      report.opportunities.push(opp);
     },
+  };
+
+  streamDisplayCallbacksRef.current = {
+    onBeforeUserInput: clearStreamArea,
+    onAfterUserInput: prepareForStreamResume,
   };
 
   const graph = agent.getGraph(accumulator);
@@ -30,18 +46,15 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   );
 
   let aborted = false;
-  const result = await consumeStreamWithTwoLines(stream, {
-    onAbort: () => {
-      aborted = true;
-    },
-  });
-
-  const report: CleanupReport = {
-    generatedAt: new Date().toISOString(),
-    system: getPlatformName(),
-    backupWarning: DEFAULT_BACKUP_WARNING,
-    opportunities,
-  };
+  try {
+    await consumeStreamWithTwoLines(stream, {
+      onAbort: () => {
+        aborted = true;
+      },
+    });
+  } finally {
+    streamDisplayCallbacksRef.current = null;
+  }
 
   const reportService = new ReportService({ configService });
   const savedPath = reportService.saveReport(report);

@@ -6,7 +6,10 @@
 import { ConfigService } from "./configService.js";
 import { StateService } from "./stateService.js";
 import { ProviderService } from "@/services/providerService.js";
-import { createAllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
+import {
+  createAllowlistMiddleware,
+  type StreamDisplayCallbacks,
+} from "@/agent/allowlistMiddleware.js";
 import { createAgent } from "@/agent/agent.js";
 import type { DiskCleanupAgent } from "@/agent/agent.js";
 
@@ -15,6 +18,8 @@ export interface BootstrapContext {
   stateService: StateService;
   providerService: ProviderService;
   agent: DiskCleanupAgent;
+  /** Set .current before running a stream that may ask for user input (e.g. cleanup report); clear after. */
+  streamDisplayCallbacksRef: { current: StreamDisplayCallbacks | null };
 }
 
 export type RunAddProviderWorkflow = (providerService: ProviderService) => Promise<boolean>;
@@ -52,7 +57,10 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     }
   }
 
-  const allowlistMiddleware = createAllowlistMiddleware(stateService);
+  const streamDisplayCallbacksRef: { current: StreamDisplayCallbacks | null } = { current: null };
+  const allowlistMiddleware = createAllowlistMiddleware(stateService, {
+    getStreamDisplayCallbacks: () => streamDisplayCallbacksRef.current,
+  });
   const agent = createAgent({
     stateService,
     providerService,
@@ -67,5 +75,6 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     stateService,
     providerService,
     agent,
+    streamDisplayCallbacksRef,
   };
 }
