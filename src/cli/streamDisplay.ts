@@ -8,7 +8,8 @@ import input from "@inquirer/input";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { UserInputQueue, PendingRequest } from "./userInputQueue.js";
 
-const CLEAR_LINE = "\r\x1b[K";
+const CARRIAGE_RETURN = "\r";
+const CLEAR_LINE = `${CARRIAGE_RETURN}\x1b[K`;
 
 const COORDINATOR_POLL_MS = 50;
 
@@ -33,6 +34,24 @@ export function getStreamLineFromQueue(queue: string[]): string {
   const raw = queue.join("").replace(/\r\n|\r|\n/g, " ").trim();
   if (raw.length <= STREAM_DISPLAY_MAX_CHARS) return raw;
   return raw.slice(-STREAM_DISPLAY_MAX_CHARS);
+}
+
+/** Format text for the single-line stream display, preserving max length. */
+function formatDisplayLine(raw: string): string {
+  // Keep rendering to a single terminal row so carriage-return updates overwrite cleanly.
+  const terminalWidth =
+    typeof process.stdout.columns === "number" && process.stdout.columns > 0
+      ? process.stdout.columns
+      : STREAM_DISPLAY_MAX_CHARS;
+  const maxChars = Math.max(1, Math.min(STREAM_DISPLAY_MAX_CHARS, terminalWidth - 1));
+  return raw.length <= maxChars ? raw : "…" + raw.slice(-(maxChars - 1));
+}
+
+/** Write one in-place line update (always reuses current line with carriage return). */
+function writeDisplayLine(raw: string): string {
+  const line = formatDisplayLine(raw);
+  process.stdout.write(CLEAR_LINE + line);
+  return line;
 }
 
 /** Clear the stream line and move cursor to a fresh line. Call before showing a user prompt. */
@@ -86,6 +105,50 @@ export interface RunStreamTaskOptions {
 }
 
 /**
+ * Extract streamed text from a LangChain message chunk.
+ * Supports both string content and structured content/contentBlocks arrays.
+ */
+function getChunkText(chunk: unknown): string {
+  const normalize = (s: string): string => s.replace(/\r\n|\r|\n/g, " ");
+  const out: string[] = [];
+
+  const pushBlock = (block: unknown): void => {
+    if (typeof block === "string") {
+      const text = normalize(block);
+      if (text) out.push(text);
+      return;
+    }
+    if (!block || typeof block !== "object") return;
+    // Keep only user-visible text tokens; ignore tool-call arg fragments.
+    const text = (block as { text?: unknown }).text;
+    if (typeof text === "string" && text.length > 0) {
+      out.push(normalize(text));
+    }
+  };
+
+  if (!chunk || typeof chunk !== "object") return "";
+
+  const contentBlocks = (chunk as { contentBlocks?: unknown }).contentBlocks;
+  if (Array.isArray(contentBlocks)) {
+    for (const block of contentBlocks) pushBlock(block);
+    // Some providers expose both `content` and `contentBlocks` with equivalent data.
+    // Prefer contentBlocks to avoid double-appending the same chunk text.
+    return out.join("");
+  }
+
+  const content = (chunk as { content?: unknown }).content;
+  if (typeof content === "string") {
+    const text = normalize(content);
+    return text || "";
+  }
+  if (Array.isArray(content)) {
+    for (const block of content) pushBlock(block);
+  }
+
+  return out.join("");
+}
+
+/**
  * Consume the graph stream in the background; update sharedState.lastChunk and set done when finished.
  * Supports streamMode "values" (chunk = state) or ["values", "messages"] (chunk = [mode, data]).
  * When "messages" mode is used, LLM tokens are enqueued to sharedState.streamedTokenQueue; queue is cleared on each "values" chunk.
@@ -122,11 +185,8 @@ export async function runStreamTask(
           }
         } else if (mode === "messages") {
           const [messageChunk] = data as [BaseMessage, Record<string, unknown>];
-          const content = (messageChunk as { content?: string }).content;
-          if (typeof content === "string" && content) {
-            const noNewlines = content.replace(/\r\n|\r|\n/g, " ");
-            sharedState.streamedTokenQueue.push(noNewlines);
-          }
+          const text = getChunkText(messageChunk);
+          if (text) sharedState.streamedTokenQueue.push(text);
         }
         continue;
       }
@@ -153,7 +213,7 @@ export interface RunCoordinatorLoopOptions {
 
 /**
  * Run the coordinator loop: when the queue has items, clear stream area, show prompt, resolve with answer;
- * when the queue is empty, update the single stream line (50 chars, \r in place) from sharedState.
+ * when the queue is empty, update the single stream line (max STREAM_DISPLAY_MAX_CHARS, \r in place) from sharedState.
  * Exits when sharedState.done is true and the queue is empty.
  */
 export async function runCoordinatorLoop(
@@ -221,12 +281,9 @@ export async function runCoordinatorLoop(
         raw = content ? content.replace(/\r\n|\r|\n/g, " ").trim() : " ";
       }
 
-      const line =
-        raw.length <= STREAM_DISPLAY_MAX_CHARS ? raw : "…" + raw.slice(-(STREAM_DISPLAY_MAX_CHARS - 1));
-
-      if (line !== lastLine) {
-        lastLine = line;
-        process.stdout.write(CLEAR_LINE + line);
+      const nextLine = formatDisplayLine(raw);
+      if (nextLine !== lastLine) {
+        lastLine = writeDisplayLine(raw);
       }
 
       await new Promise((r) => setTimeout(r, COORDINATOR_POLL_MS));
@@ -239,7 +296,7 @@ export async function runCoordinatorLoop(
 }
 
 /**
- * Consume the graph stream and update a single line (50 chars, \r in place). On SIGINT, restores terminal and calls onAbort.
+ * Consume the graph stream and update a single line (max STREAM_DISPLAY_MAX_CHARS, \r in place). On SIGINT, restores terminal and calls onAbort.
  */
 export async function consumeStreamWithTwoLines(
   stream: AsyncIterable<{ messages?: BaseMessage[] }>,
@@ -258,11 +315,9 @@ export async function consumeStreamWithTwoLines(
     const tool = getLastToolFromMessages(lastState.messages);
     const content = getLastContent(lastState.messages);
     const raw = tool ? `Tool: ${tool}` : content || "Thinking...";
-    const line =
-      raw.length <= STREAM_DISPLAY_MAX_CHARS ? raw : "…" + raw.slice(-(STREAM_DISPLAY_MAX_CHARS - 1));
-    if (line !== lastLine) {
-      lastLine = line;
-      process.stdout.write(CLEAR_LINE + line);
+    const nextLine = formatDisplayLine(raw);
+    if (nextLine !== lastLine) {
+      lastLine = writeDisplayLine(raw);
     }
   };
 

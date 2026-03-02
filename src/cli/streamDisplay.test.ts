@@ -77,6 +77,59 @@ describe("runStreamTask queue behavior", () => {
     await run;
   });
 
+  it("extracts text from structured content blocks", async () => {
+    const sharedState: StreamSharedState = {
+      lastChunk: null,
+      toolProgress: null,
+      done: false,
+      streamedTokenQueue: [],
+    };
+    const stream = (async function* () {
+      yield ["messages", [{ content: [{ type: "text", text: "hel" }] }, {}]];
+      yield ["messages", [{ contentBlocks: [{ type: "text", text: "lo" }] }, {}]];
+    })();
+    await runStreamTask(stream, sharedState);
+    expect(sharedState.streamedTokenQueue).toEqual(["hel", "lo"]);
+  });
+
+  it("ignores tool-call arg chunks when streaming messages", async () => {
+    const sharedState: StreamSharedState = {
+      lastChunk: null,
+      toolProgress: null,
+      done: false,
+      streamedTokenQueue: [],
+    };
+    const stream = (async function* () {
+      yield ["messages", [{ contentBlocks: [{ type: "tool_call_chunk", args: "{\"q\":\"x\"}" }] }, {}]];
+      yield ["messages", [{ contentBlocks: [{ type: "text", text: "ok" }] }, {}]];
+    })();
+    await runStreamTask(stream, sharedState);
+    expect(sharedState.streamedTokenQueue).toEqual(["ok"]);
+  });
+
+  it("does not double-append when chunk has both content and contentBlocks", async () => {
+    const sharedState: StreamSharedState = {
+      lastChunk: null,
+      toolProgress: null,
+      done: false,
+      streamedTokenQueue: [],
+    };
+    const stream = (async function* () {
+      yield [
+        "messages",
+        [
+          {
+            content: [{ type: "text", text: "dup" }],
+            contentBlocks: [{ type: "text", text: "dup" }],
+          },
+          {},
+        ],
+      ];
+    })();
+    await runStreamTask(stream, sharedState);
+    expect(sharedState.streamedTokenQueue).toEqual(["dup"]);
+  });
+
   it("clears queue on each values chunk", async () => {
     const sharedState: StreamSharedState = {
       lastChunk: null,

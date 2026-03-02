@@ -90,7 +90,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   const planGraph = agent.getGraph(accumulator, undefined);
   const planStream = await planGraph.stream(
     { messages: [new HumanMessage(PLAN_PROMPT)] },
-    { streamMode: "values", recursionLimit }
+    { streamMode: ["values", "messages"], recursionLimit }
   );
 
   const planTaskPromise = runStreamTask(planStream, planSharedState, {
