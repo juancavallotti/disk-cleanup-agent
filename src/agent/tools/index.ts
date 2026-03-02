@@ -1,6 +1,7 @@
 export { getSystemTypeTool } from "./getSystemType.js";
 export { getCurrentUsernameTool } from "./getCurrentUsername.js";
 export { createListFoldersTool } from "./listFolders.js";
+export { createListFolderContentsBySizeTool } from "./listFolderContentsBySize.js";
 export { createChangeDirectoryTool } from "./changeDirectory.js";
 export { createGetFolderCapacityTool } from "./getFolderCapacity.js";
 export { createGetFolderCapacityBatchTool } from "./getFolderCapacityBatch.js";

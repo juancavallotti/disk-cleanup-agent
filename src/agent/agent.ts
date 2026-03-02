@@ -16,6 +16,7 @@ import {
   getSystemTypeTool,
   getCurrentUsernameTool,
   createListFoldersTool,
+  createListFolderContentsBySizeTool,
   createChangeDirectoryTool,
   createGetFolderCapacityTool,
   createGetFolderCapacityBatchTool,
@@ -31,7 +32,7 @@ RULES:
 
 WORKFLOW:
 1. First output a GAME PLAN: which directories you will inspect (only user locations), in what order, and what you will measure. The user will see this streamed.
-2. Then execute that plan using your tools: get_system_type, get_current_username, list_folders, change_directory, get_folder_capacity, get_folder_capacity_batch. Use get_folder_capacity_batch when you need to measure multiple paths to run them in parallel and save time.
+2. Then execute that plan using your tools: get_system_type, get_current_username, list_folders, list_folder_contents_by_size, change_directory, get_folder_capacity, get_folder_capacity_batch. Use list_folder_contents_by_size when you need to see which specific files or subfolders inside a directory are large (returns a markdown table of path, fileSize, kind sorted by size) so you can report individual items via report_cleanup_opportunity. Use get_folder_capacity_batch when you need to measure multiple paths to run them in parallel and save time.
 3. For each location that is safe to clean, call report_cleanup_opportunity. When you have finished exploring and reporting, summarize and stop.`;
 
 function resolveProvider(stateService: StateService, providerService: ProviderService): Provider {
@@ -46,7 +47,7 @@ function resolveProvider(stateService: StateService, providerService: ProviderSe
   return providers[0];
 }
 
-const ALLOWLIST_TOOL_NAMES = ["list_folders", "change_directory", "get_folder_capacity", "get_folder_capacity_batch"];
+const ALLOWLIST_TOOL_NAMES = ["list_folders", "list_folder_contents_by_size", "change_directory", "get_folder_capacity", "get_folder_capacity_batch"];
 
 export interface DiskCleanupAgentOptions {
   stateService: StateService;
@@ -95,6 +96,7 @@ export function createAgent(options: DiskCleanupAgentOptions): DiskCleanupAgent 
         getSystemTypeTool,
         getCurrentUsernameTool,
         wrapToolWithAllowlist(createListFoldersTool({ defaultCwd, onProgress }), allowlistMiddleware),
+        wrapToolWithAllowlist(createListFolderContentsBySizeTool({ defaultCwd, onProgress }), allowlistMiddleware),
         wrapToolWithAllowlist(createChangeDirectoryTool({ defaultCwd }), allowlistMiddleware),
         wrapToolWithAllowlist(createGetFolderCapacityTool({ defaultCwd, onProgress }), allowlistMiddleware),
         wrapToolWithAllowlist(createGetFolderCapacityBatchTool({ defaultCwd, onProgress }), allowlistMiddleware),

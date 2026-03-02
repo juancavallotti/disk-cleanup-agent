@@ -2,34 +2,12 @@
  * Tool: get_folder_capacity_batch — get capacity for multiple paths in parallel.
  */
 
-import { readdirSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { assertNotSystemPath } from "./systemPaths.js";
-
-function getFolderCapacitySync(dirPath: string): number {
-  let total = 0;
-  try {
-    const entries = readdirSync(dirPath, { withFileTypes: true });
-    for (const e of entries) {
-      const full = resolve(dirPath, e.name);
-      try {
-        const stat = statSync(full);
-        if (stat.isDirectory()) {
-          total += getFolderCapacitySync(full);
-        } else {
-          total += stat.size;
-        }
-      } catch {
-        // skip
-      }
-    }
-  } catch {
-    // return 0
-  }
-  return total;
-}
+import { getFolderCapacitySync } from "./folderSize.js";
 
 function measureOne(path: string, defaultCwd?: string): { path: string; sizeBytes: number; error?: string } {
   const base = defaultCwd || process.cwd();
