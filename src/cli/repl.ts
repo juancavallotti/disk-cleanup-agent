@@ -11,7 +11,7 @@ import { handleDeleteProvider } from "./deleteProvider.js";
 import { handleSelectProvider } from "./selectProvider.js";
 import { getReplHelpText } from "./program.js";
 import { runCleanupReport } from "./cleanupReport.js";
-import { runCleanupClean } from "./cleanupClean.js";
+import { runCleanupScript } from "./cleanupScript.js";
 import { runCleanupReportView } from "./cleanupReportView.js";
 
 const PROMPT = "disk-cleanup> ";
@@ -74,8 +74,13 @@ export function startRepl(context: BootstrapContext): void {
             } finally {
               rl.resume();
             }
-          } else if (sub === "clean") {
-            runCleanupClean();
+          } else if (sub === "script") {
+            rl.pause();
+            try {
+              await runCleanupScript(context);
+            } finally {
+              rl.resume();
+            }
           } else if (sub === "view") {
             rl.pause();
             try {
@@ -84,9 +89,9 @@ export function startRepl(context: BootstrapContext): void {
               rl.resume();
             }
           } else if (sub) {
-            console.log("Unknown cleanup command. Type 'help' for cleanup report, clean, view.");
+            console.log("Unknown cleanup command. Type 'help' for cleanup report, script, view.");
           } else {
-            console.log("cleanup <report|clean|view>. Type 'help' for details.");
+            console.log("cleanup <report|script|view>. Type 'help' for details.");
           }
           break;
         }

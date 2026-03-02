@@ -18,7 +18,7 @@ async function main(): Promise<void> {
 
   const program = buildProgram(context);
   const args = process.argv.slice(2);
-  const cleanupSubs = ["report", "clean", "view"];
+  const cleanupSubs = ["report", "script", "view"];
   const hasCleanupSub = args[0] === "cleanup" && args[1] && cleanupSubs.includes(args[1]);
 
   if (hasCleanupSub) {

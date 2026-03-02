@@ -17,11 +17,10 @@ import { DEFAULT_BACKUP_WARNING } from "@/services/reportTypes.js";
 import { ReportService } from "@/services/reportService.js";
 import { getPlatformName } from "@/agent/tools/systemPaths.js";
 
-const PLAN_PROMPT = `You are planning a disk cleanup. Output ONLY an execution plan as ASCII bullet points. Do not use any tools.
-List which directories you will inspect (only user locations: home, caches in home—never system folders like /System, /Library, /usr). One bullet per step, in order. Keep it short and concrete. No other text.`;
+const PLAN_PROMPT = `The user requested a cleanup report. Call the skills tool with skill name "report" to load the task instructions. Then output ONLY an execution plan as ASCII bullet points: list which directories you will inspect (only user locations—never system folders like /System, /Library, /usr). One bullet per step, in order. Do not use any other tools yet.`;
 
 const REPORT_TASK =
-  "Generate a disk cleanup report. First output your game plan (which directories you will inspect, only user locations—never system folders). Then execute the plan using your tools. Use get_folder_capacity_batch when measuring multiple paths. For locations that are safe to clean, call report_cleanup_opportunity with opportunities: an array of { path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, optional suggestedAction }; you may pass one or many per call—prefer batching when you have multiple findings. When done, summarize.";
+  "Execute the plan using your tools. You already have the report skill loaded; use get_folder_capacity_batch when measuring multiple paths. For each location that is safe to clean, call report_cleanup_opportunity with opportunities: an array of { path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, optional suggestedAction }. When done, summarize.";
 
 const YN_VALIDATE = (v: string): true | string => {
   const lower = v.trim().toLowerCase();
@@ -83,7 +82,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     toolProgress: null,
     done: false,
   };
-  const planGraph = agent.getGraph(accumulator);
+  const planGraph = agent.getGraph(accumulator, undefined);
   const planStream = await planGraph.stream(
     { messages: [new HumanMessage(PLAN_PROMPT)] },
     { streamMode: "values", recursionLimit }
@@ -126,7 +125,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     toolProgress: null,
     done: false,
   };
-  const executionGraph = agent.getGraph(accumulator, {
+  const executionGraph = agent.getGraph(accumulator, undefined, {
     thinkingStreamWriter: (text) => {
       sharedState.toolProgress = text;
     },

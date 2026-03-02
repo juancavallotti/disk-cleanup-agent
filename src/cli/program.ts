@@ -1,5 +1,5 @@
 /**
- * Commander program: cleanup (report, clean, view). If no subcommand, fall back to REPL.
+ * Commander program: cleanup (report, script, view). If no subcommand, fall back to REPL.
  * Help text for the REPL is derived from this program so it stays in sync.
  */
 

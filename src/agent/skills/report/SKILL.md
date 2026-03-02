@@ -1,0 +1,21 @@
+---
+name: disk-cleanup-report
+description: Produces a disk cleanup report by exploring user-writable locations and calling report_cleanup_opportunity. Use when the user requests a cleanup report or to list safe cleanup opportunities.
+---
+
+# Disk Cleanup Report
+
+## Rules
+
+- Only consider user-writable locations: home directory, caches in home, user data. NEVER use or suggest system folders (e.g. /System, /Library, /usr on macOS; C:\Windows on Windows; /etc, /usr on Linux). Your tools will reject system paths.
+- Only suggest removing a user folder if it is a well-known junk-accumulator (e.g. Cache, Caches, Temp, tmp, Trash, .Trash, browser caches, npm/yarn caches, package-manager caches, IDE caches, old download installers). Do NOT suggest deleting arbitrary user folders such as Documents, Desktop, project directories, or application data unless they are clearly cache/temp/trash. When in doubt, do not report the folder.
+- For each cleanup opportunity you find, you MUST call report_cleanup_opportunity with an array "opportunities" where each item has: path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, and optional suggestedAction. You may report one or many opportunities per call; prefer batching multiple findings into a single call when you have several. Provide a clear contents description and safety justification for each.
+- When a command-related cache (e.g. npm, docker, brew, yarn) is using a lot of space and that command is installed, suggest using that command's own cleanup (e.g. `npm cache clean --force`, `docker system prune`, `brew cleanup`) in suggestedAction rather than only recommending deleting the directory. Prefer "run this command to clean" over "delete these files" when the cache is tied to an installed tool.
+
+## Workflow
+
+1. **Plan phase (if the user asked for a plan first):** Output ONLY an execution plan as ASCII bullet points. List which directories you will inspect (only user locations: home, caches in home—never system folders). One bullet per step, in order. Do not use tools in the plan phase if the task says "plan only".
+2. **Execution phase:** Call get_system_type and get_current_username so the plan is OS-aware. Call get_common_offender_paths to get candidate directories. Call command_probe with relevant command names (e.g. npm, yarn, docker, brew). Then explore: use list_folders from home, list_folder_contents_by_size on large dirs, get_folder_capacity_batch to measure multiple paths. For each location that is safe to clean, call report_cleanup_opportunity with opportunities: [{ path, pathDescription, sizeBytes, contentsDescription, whySafeToDelete, suggestedAction? }, ...]. When done, summarize and stop.
+3. **Tools to use:** get_system_type, get_current_username, get_common_offender_paths, command_probe, list_folders, list_folder_contents_by_size, change_directory, get_folder_capacity, get_folder_capacity_batch, report_cleanup_opportunity. Use list_folder_contents_by_size when you need to see which files or subfolders inside a directory are large (returns a markdown table). Use get_folder_capacity_batch to measure multiple paths in parallel.
+
+If you have the web_search tool: You may use it to look up the best way to clean or safely remove suspicious or non-obvious items. Prefer suggesting actions like "Clear via app settings", "Run `xyz` to prune", or "Safe to delete after backup" when search results support them, and put that in suggestedAction.
