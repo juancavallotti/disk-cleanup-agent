@@ -54,11 +54,17 @@ export interface DiskCleanupAgentOptions {
   allowlistMiddleware: AllowlistMiddleware;
 }
 
+/** Options passed when building the graph for a streamed run (e.g. to allow tools to stream progress to the thinking display). */
+export interface GetGraphOptions {
+  /** When set, long-running tools may call this to stream progress to the thinking stream. */
+  thinkingStreamWriter?: (text: string) => void;
+}
+
 export interface DiskCleanupAgent {
   getProvider(): Provider;
   getChatModel(): ReturnType<typeof createChatModelFromProvider>;
   /** Build the ReAct graph for report run. If reportAccumulator is provided, includes report_cleanup_opportunity tool. */
-  getGraph(reportAccumulator?: ReportAccumulator): ReturnType<typeof createReactAgent>;
+  getGraph(reportAccumulator?: ReportAccumulator, options?: GetGraphOptions): ReturnType<typeof createReactAgent>;
   /** Legacy: run one turn (no tools). Prefer getGraph().stream() for report flow. */
   invoke(threadId: string, userContent: string): Promise<string>;
 }
@@ -80,17 +86,18 @@ export function createAgent(options: DiskCleanupAgentOptions): DiskCleanupAgent 
       return createChatModelFromProvider(provider);
     },
 
-    getGraph(reportAccumulator?: ReportAccumulator) {
+    getGraph(reportAccumulator?: ReportAccumulator, options?: GetGraphOptions) {
       const model = this.getChatModel();
       const defaultCwd = process.cwd();
+      const onProgress = options?.thinkingStreamWriter;
 
       const baseTools = [
         getSystemTypeTool,
         getCurrentUsernameTool,
-        wrapToolWithAllowlist(createListFoldersTool({ defaultCwd }), allowlistMiddleware),
+        wrapToolWithAllowlist(createListFoldersTool({ defaultCwd, onProgress }), allowlistMiddleware),
         wrapToolWithAllowlist(createChangeDirectoryTool({ defaultCwd }), allowlistMiddleware),
-        wrapToolWithAllowlist(createGetFolderCapacityTool({ defaultCwd }), allowlistMiddleware),
-        wrapToolWithAllowlist(createGetFolderCapacityBatchTool({ defaultCwd }), allowlistMiddleware),
+        wrapToolWithAllowlist(createGetFolderCapacityTool({ defaultCwd, onProgress }), allowlistMiddleware),
+        wrapToolWithAllowlist(createGetFolderCapacityBatchTool({ defaultCwd, onProgress }), allowlistMiddleware),
       ];
 
       const tools = reportAccumulator

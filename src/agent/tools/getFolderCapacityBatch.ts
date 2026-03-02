@@ -49,13 +49,23 @@ function measureOne(path: string, defaultCwd?: string): { path: string; sizeByte
 
 export interface GetFolderCapacityBatchOptions {
   defaultCwd?: string;
+  /** When set, tool may stream progress to the thinking display (e.g. "Measuring N paths..."). */
+  onProgress?: (text: string) => void;
 }
 
 export function createGetFolderCapacityBatchTool(options: GetFolderCapacityBatchOptions = {}) {
-  const { defaultCwd } = options;
+  const { defaultCwd, onProgress } = options;
   return tool(
     ((input: { paths: string[] }) => {
-      const results = input.paths.map((p) => measureOne(p, defaultCwd));
+      const paths = input.paths ?? [];
+      const results: { path: string; sizeBytes: number; error?: string }[] = [];
+      for (let i = 0; i < paths.length; i++) {
+        if (onProgress) {
+          if (paths.length === 1) onProgress(`Measuring ${paths[i]}...`);
+          else onProgress(`Measuring ${i + 1}/${paths.length}: ${paths[i]}...`);
+        }
+        results.push(measureOne(paths[i], defaultCwd));
+      }
       return JSON.stringify(results, null, 0);
     }) as (input: unknown) => string,
     {

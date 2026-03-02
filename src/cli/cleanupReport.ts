@@ -80,7 +80,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     message: "Accept this plan and proceed? [y/n]",
     validate: YN_VALIDATE,
   });
-  const planSharedState: StreamSharedState = { lastChunk: null, done: true };
+  const planSharedState: StreamSharedState = { lastChunk: null, toolProgress: null, done: true };
   await runCoordinatorLoop(planSharedState, userInputQueue);
   const acceptAnswer = await planAcceptPromise;
   if (acceptAnswer.trim().toLowerCase() !== "y") {
@@ -93,13 +93,17 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     "Now execute this plan using your tools. " +
     REPORT_TASK;
 
-  const graph = agent.getGraph(accumulator);
+  const sharedState: StreamSharedState = { lastChunk: null, toolProgress: null, done: false };
+  const graph = agent.getGraph(accumulator, {
+    thinkingStreamWriter: (text) => {
+      sharedState.toolProgress = text;
+    },
+  });
   const stream = await graph.stream(
     { messages: [new HumanMessage(executionMessage)] },
     { streamMode: "values" }
   );
 
-  const sharedState: StreamSharedState = { lastChunk: null, done: false };
   let aborted = false;
 
   const streamTaskPromise = runStreamTask(stream, sharedState, {

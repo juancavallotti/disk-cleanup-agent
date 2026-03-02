@@ -10,6 +10,8 @@ import { assertNotSystemPath } from "./systemPaths.js";
 
 export interface ListFoldersOptions {
   defaultCwd?: string;
+  /** When set, tool may stream progress to the thinking display (e.g. "Listing ..."). */
+  onProgress?: (text: string) => void;
 }
 
 function listFolders(path: string, defaultCwd?: string): string {
@@ -31,9 +33,14 @@ function listFolders(path: string, defaultCwd?: string): string {
 }
 
 export function createListFoldersTool(options: ListFoldersOptions = {}) {
-  const { defaultCwd } = options;
+  const { defaultCwd, onProgress } = options;
   return tool(
-    ((input: { path?: string }) => listFolders(input.path ?? "", defaultCwd)) as (input: unknown) => string,
+    ((input: { path?: string }) => {
+      const path = input.path ?? "";
+      const toResolve = path.trim() || defaultCwd || process.cwd();
+      onProgress?.(`Listing ${toResolve || "."}...`);
+      return listFolders(path, defaultCwd);
+    }) as (input: unknown) => string,
     {
       name: "list_folders",
       description: "List the contents of a directory. Give an absolute or relative path; if omitted, uses current working directory. Returns each entry with its type (dir, file, other). Never use system folders (e.g. /System, /usr, C:\\Windows).",

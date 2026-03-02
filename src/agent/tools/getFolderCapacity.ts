@@ -49,12 +49,17 @@ function getFolderCapacity(path: string, defaultCwd?: string): string {
 
 export interface GetFolderCapacityOptions {
   defaultCwd?: string;
+  /** When set, tool may stream progress to the thinking display (e.g. "Measuring ..."). */
+  onProgress?: (text: string) => void;
 }
 
 export function createGetFolderCapacityTool(options: GetFolderCapacityOptions = {}) {
-  const { defaultCwd } = options;
+  const { defaultCwd, onProgress } = options;
   return tool(
-    ((input: { path: string }) => getFolderCapacity(input.path, defaultCwd)) as (input: unknown) => string,
+    ((input: { path: string }) => {
+      onProgress?.(`Measuring ${input.path || "."}...`);
+      return getFolderCapacity(input.path, defaultCwd);
+    }) as (input: unknown) => string,
     {
       name: "get_folder_capacity",
       description: "Get the total size in bytes of a directory (recursive). Give the folder path. Can be slow for large directories. Never use system folders.",

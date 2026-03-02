@@ -13,9 +13,11 @@ const MOVE_UP = "\x1b[1A";
 
 const COORDINATOR_POLL_MS = 50;
 
-/** Shared state between stream task and coordinator: latest chunk and stream completion. */
+/** Shared state between stream task and coordinator: latest chunk, optional tool progress, and stream completion. */
 export interface StreamSharedState {
   lastChunk: { messages: BaseMessage[] } | null;
+  /** When set by a running tool, the coordinator shows this as line 2 (thinking stream). Cleared when a new chunk arrives. */
+  toolProgress: string | null;
   done: boolean;
   aborted?: boolean;
 }
@@ -93,6 +95,7 @@ export async function runStreamTask(
       if (sharedState.aborted) break;
       if (chunk?.messages) {
         sharedState.lastChunk = { messages: chunk.messages };
+        sharedState.toolProgress = null;
       }
     }
   } finally {
@@ -160,12 +163,13 @@ export async function runCoordinatorLoop(
         continue;
       }
 
-      if (sharedState.lastChunk) {
-        const messages = sharedState.lastChunk.messages;
+      if (sharedState.lastChunk || sharedState.toolProgress !== null) {
+        const messages = sharedState.lastChunk?.messages ?? [];
         const tool = getLastToolFromMessages(messages);
-        const content = getLastContent(messages);
+        const content = sharedState.toolProgress ?? getLastContent(messages);
+        const maxContent = 80;
+        const newLine2 = (content.length <= maxContent ? content : content.slice(0, maxContent) + "...") || " ";
         const newLine1 = tool ? `Tool: ${tool}` : "Thinking...";
-        const newLine2 = content || " ";
         if (newLine1 !== line1 || newLine2 !== line2) {
           line1 = newLine1;
           line2 = newLine2;
