@@ -36,3 +36,7 @@ alwaysApply: true
 ## Conventions
 
 - One Commander command per file under `cli/`; one tool per file under `agent/tools/`. System layer owns all wiring. State and config are system-layer concerns.
+
+## Stream display
+
+- Agent/tool stream is shown as a **single line** only: max 50 chars, updated in place with `\r` (no rolling two lines).

@@ -1,7 +1,7 @@
 /**
- * Two-line rolling display for agent stream: line 1 = last step/tool, line 2 = current content.
+ * Single-line stream display: one line, max 50 chars, updated in place with \r.
  * Handles SIGINT to abort and restore terminal.
- * Coordinator loop alternates between showing thinking stream and draining the user input queue.
+ * Coordinator loop alternates between showing the line and draining the user input queue.
  */
 
 import input from "@inquirer/input";
@@ -9,29 +9,39 @@ import type { BaseMessage } from "@langchain/core/messages";
 import type { UserInputQueue, PendingRequest } from "./userInputQueue.js";
 
 const CLEAR_LINE = "\r\x1b[K";
-const MOVE_UP = "\x1b[1A";
 
 const COORDINATOR_POLL_MS = 50;
+
+/** Max characters shown for the in-place streamed token line. */
+export const STREAM_DISPLAY_MAX_CHARS = 50;
 
 /** Shared state between stream task and coordinator: latest chunk, optional tool progress, and stream completion. */
 export interface StreamSharedState {
   lastChunk: { messages: BaseMessage[] } | null;
-  /** When set by a running tool, the coordinator shows this as line 2 (thinking stream). Cleared when a new chunk arrives. */
+  /** When set by a running tool, the coordinator shows this on the single stream line (max 50 chars). Cleared when a new chunk arrives. */
   toolProgress: string | null;
   done: boolean;
   aborted?: boolean;
-  /** Accumulated LLM token stream for the current turn (cleared on values update). Shown as line 2 when set. */
-  streamedText?: string;
+  /** Enqueued LLM token chunks for the current turn (cleared on values update). Coordinator reads for display. */
+  streamedTokenQueue: string[];
 }
 
-/** Clear the two-line stream area and move cursor to a fresh line. Call before showing a user prompt. */
+/**
+ * Build the current stream line from the queue: join chunks, strip newlines, return last STREAM_DISPLAY_MAX_CHARS.
+ */
+export function getStreamLineFromQueue(queue: string[]): string {
+  const raw = queue.join("").replace(/\r\n|\r|\n/g, " ").trim();
+  if (raw.length <= STREAM_DISPLAY_MAX_CHARS) return raw;
+  return raw.slice(-STREAM_DISPLAY_MAX_CHARS);
+}
+
+/** Clear the stream line and move cursor to a fresh line. Call before showing a user prompt. */
 export function clearStreamArea(): void {
   process.stdout.write(CLEAR_LINE);
-  process.stdout.write(MOVE_UP + CLEAR_LINE);
   process.stdout.write("\n");
 }
 
-/** Print a blank line before resuming the two-line stream display (call after user answers). */
+/** Print a blank line before resuming the stream line (call after user answers). */
 export function prepareForStreamResume(): void {
   process.stdout.write("\n");
 }
@@ -78,7 +88,7 @@ export interface RunStreamTaskOptions {
 /**
  * Consume the graph stream in the background; update sharedState.lastChunk and set done when finished.
  * Supports streamMode "values" (chunk = state) or ["values", "messages"] (chunk = [mode, data]).
- * When "messages" mode is used, LLM tokens are accumulated in sharedState.streamedText.
+ * When "messages" mode is used, LLM tokens are enqueued to sharedState.streamedTokenQueue; queue is cleared on each "values" chunk.
  */
 export async function runStreamTask(
   stream: AsyncIterable<unknown>,
@@ -108,14 +118,14 @@ export async function runStreamTask(
           if (state?.messages) {
             sharedState.lastChunk = { messages: state.messages };
             sharedState.toolProgress = null;
-            sharedState.streamedText = "";
+            sharedState.streamedTokenQueue.length = 0;
           }
         } else if (mode === "messages") {
           const [messageChunk] = data as [BaseMessage, Record<string, unknown>];
           const content = (messageChunk as { content?: string }).content;
           if (typeof content === "string" && content) {
             const noNewlines = content.replace(/\r\n|\r|\n/g, " ");
-            sharedState.streamedText = (sharedState.streamedText ?? "") + noNewlines;
+            sharedState.streamedTokenQueue.push(noNewlines);
           }
         }
         continue;
@@ -125,7 +135,7 @@ export async function runStreamTask(
       if (state?.messages) {
         sharedState.lastChunk = { messages: state.messages };
         sharedState.toolProgress = null;
-        sharedState.streamedText = "";
+        sharedState.streamedTokenQueue.length = 0;
       }
     }
   } finally {
@@ -143,7 +153,7 @@ export interface RunCoordinatorLoopOptions {
 
 /**
  * Run the coordinator loop: when the queue has items, clear stream area, show prompt, resolve with answer;
- * when the queue is empty, update the two-line thinking display from sharedState.
+ * when the queue is empty, update the single stream line (50 chars, \r in place) from sharedState.
  * Exits when sharedState.done is true and the queue is empty.
  */
 export async function runCoordinatorLoop(
@@ -152,8 +162,7 @@ export async function runCoordinatorLoop(
   options: RunCoordinatorLoopOptions = {}
 ): Promise<void> {
   const { onAbort } = options;
-  let line1 = "";
-  let line2 = "";
+  let lastLine = "";
   let currentRequest: PendingRequest | undefined;
 
   const restore = (): void => {
@@ -196,38 +205,33 @@ export async function runCoordinatorLoop(
       }
 
       const messages = sharedState.lastChunk?.messages ?? [];
-      const tool = getLastToolFromMessages(messages);
-      const inThinkingMode = !sharedState.done && tool === null;
+      const hasStreamedContent = sharedState.streamedTokenQueue.length > 0;
+      const streamLine = hasStreamedContent ? getStreamLineFromQueue(sharedState.streamedTokenQueue) : "";
 
-      if (sharedState.lastChunk || sharedState.toolProgress !== null || (sharedState.streamedText ?? "")) {
-        let rawContent =
-          sharedState.toolProgress ??
-          (sharedState.streamedText && sharedState.streamedText.trim()
-            ? sharedState.streamedText
-            : getLastContent(messages));
-        rawContent = rawContent.replace(/\r\n|\r|\n/g, " ");
-        const maxContent = 80;
-        const newLine2 =
-          (rawContent.length <= maxContent ? rawContent : "…" + rawContent.slice(-(maxContent - 1))) || " ";
-        const newLine1 = tool ? `Tool: ${tool}` : "Thinking...";
-        if (newLine1 !== line1 || newLine2 !== line2) {
-          line1 = newLine1;
-          line2 = newLine2;
-          process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
-          process.stdout.write(MOVE_UP + MOVE_UP);
-        }
-      } else if (inThinkingMode) {
-        const newLine1 = "Thinking...";
-        const newLine2 = " ";
-        if (newLine1 !== line1 || newLine2 !== line2) {
-          line1 = newLine1;
-          line2 = newLine2;
-          process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
-          process.stdout.write(MOVE_UP + MOVE_UP);
-        }
+      let raw: string;
+      if (sharedState.toolProgress !== null) {
+        raw = sharedState.toolProgress.replace(/\r\n|\r|\n/g, " ").trim();
+      } else if (streamLine) {
+        raw = streamLine;
+      } else if (!sharedState.done) {
+        const tool = getLastToolFromMessages(messages);
+        raw = tool ? `Tool: ${tool}` : "Thinking...";
+      } else {
+        const content = getLastContent(messages);
+        raw = content ? content.replace(/\r\n|\r|\n/g, " ").trim() : " ";
       }
+
+      const line =
+        raw.length <= STREAM_DISPLAY_MAX_CHARS ? raw : "…" + raw.slice(-(STREAM_DISPLAY_MAX_CHARS - 1));
+
+      if (line !== lastLine) {
+        lastLine = line;
+        process.stdout.write(CLEAR_LINE + line);
+      }
+
       await new Promise((r) => setTimeout(r, COORDINATOR_POLL_MS));
     }
+    process.stdout.write(CLEAR_LINE);
   } finally {
     process.off("SIGINT", handler);
     restore();
@@ -235,8 +239,7 @@ export async function runCoordinatorLoop(
 }
 
 /**
- * Consume the graph stream and update two lines: step/tool, then content.
- * On SIGINT, restores terminal and calls onAbort.
+ * Consume the graph stream and update a single line (50 chars, \r in place). On SIGINT, restores terminal and calls onAbort.
  */
 export async function consumeStreamWithTwoLines(
   stream: AsyncIterable<{ messages?: BaseMessage[] }>,
@@ -244,8 +247,7 @@ export async function consumeStreamWithTwoLines(
 ): Promise<{ messages: BaseMessage[] }> {
   const { onAbort } = options;
   let lastState: { messages: BaseMessage[] } = { messages: [] };
-  let line1 = "";
-  let line2 = "";
+  let lastLine = "";
   let interrupted = false;
 
   const restore = (): void => {
@@ -255,13 +257,12 @@ export async function consumeStreamWithTwoLines(
   const update = (): void => {
     const tool = getLastToolFromMessages(lastState.messages);
     const content = getLastContent(lastState.messages);
-    const newLine1 = tool ? `Tool: ${tool}` : "Thinking...";
-    const newLine2 = content || " ";
-    if (newLine1 !== line1 || newLine2 !== line2) {
-      line1 = newLine1;
-      line2 = newLine2;
-      process.stdout.write(CLEAR_LINE + line1 + "\n" + CLEAR_LINE + line2);
-      process.stdout.write(MOVE_UP + MOVE_UP);
+    const raw = tool ? `Tool: ${tool}` : content || "Thinking...";
+    const line =
+      raw.length <= STREAM_DISPLAY_MAX_CHARS ? raw : "…" + raw.slice(-(STREAM_DISPLAY_MAX_CHARS - 1));
+    if (line !== lastLine) {
+      lastLine = line;
+      process.stdout.write(CLEAR_LINE + line);
     }
   };
 

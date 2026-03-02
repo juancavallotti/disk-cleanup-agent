@@ -133,6 +133,7 @@ export async function runCleanupScript(context: BootstrapContext): Promise<void>
     lastChunk: null,
     toolProgress: null,
     done: false,
+    streamedTokenQueue: [],
   };
 
   const graph = agent.getGraph(undefined, accumulator, {

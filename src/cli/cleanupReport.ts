@@ -85,6 +85,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     lastChunk: null,
     toolProgress: null,
     done: false,
+    streamedTokenQueue: [],
   };
   const planGraph = agent.getGraph(accumulator, undefined);
   const planStream = await planGraph.stream(
@@ -128,6 +129,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
     lastChunk: null,
     toolProgress: null,
     done: false,
+    streamedTokenQueue: [],
   };
   const executionGraph = agent.getGraph(accumulator, undefined, {
     thinkingStreamWriter: (text) => {
