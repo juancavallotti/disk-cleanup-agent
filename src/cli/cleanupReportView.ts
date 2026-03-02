@@ -7,6 +7,7 @@ import { writeFileSync, existsSync, unlinkSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
+import type { ConfigService } from "@/system/configService.js";
 import type { BootstrapContext } from "@/system/bootstrap.js";
 import { ReportService } from "@/services/reportService.js";
 import { reportToHtml } from "@/services/reportToHtml.js";
@@ -41,6 +42,25 @@ function openInBrowser(filePath: string): void {
   }
 }
 
+/**
+ * Load a report from the given path, render to HTML in a temp file, open in browser.
+ * Temp file is registered for deletion on process exit. Returns true if successful.
+ */
+export function viewReportAtPath(configService: ConfigService, reportPath: string): boolean {
+  const reportService = new ReportService({ configService });
+  const report = reportService.getReport(reportPath);
+  if (!report) return false;
+  const html = reportToHtml(report);
+  const tempDir = join(tmpdir(), TEMP_SUBDIR);
+  mkdirSync(tempDir, { recursive: true });
+  const id = report.generatedAt.replace(/[:.]/g, "-").replace(/Z$/, "Z");
+  const htmlPath = join(tempDir, `report-${id}.html`);
+  writeFileSync(htmlPath, html, "utf-8");
+  registerTempForCleanup(htmlPath);
+  openInBrowser(htmlPath);
+  return true;
+}
+
 export async function runCleanupReportView(context: BootstrapContext): Promise<void> {
   const { configService } = context;
   const reportService = new ReportService({ configService });
@@ -62,19 +82,9 @@ export async function runCleanupReportView(context: BootstrapContext): Promise<v
     chosenPath = choice;
   }
 
-  const report = reportService.getReport(chosenPath);
-  if (!report) {
+  if (viewReportAtPath(configService, chosenPath)) {
+    console.log("Report opened in browser. (Temp file will be removed when you exit.)");
+  } else {
     console.error("Could not load report.");
-    return;
   }
-
-  const html = reportToHtml(report);
-  const tempDir = join(tmpdir(), TEMP_SUBDIR);
-  mkdirSync(tempDir, { recursive: true });
-  const id = report.generatedAt.replace(/[:.]/g, "-").replace(/Z$/, "Z");
-  const htmlPath = join(tempDir, `report-${id}.html`);
-  writeFileSync(htmlPath, html, "utf-8");
-  registerTempForCleanup(htmlPath);
-  openInBrowser(htmlPath);
-  console.log("Report opened in browser. (Temp file will be removed when you exit.)");
 }

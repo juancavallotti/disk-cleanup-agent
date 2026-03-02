@@ -15,6 +15,7 @@ import type { ReportAccumulator } from "@/agent/tools/reportCleanupOpportunity.j
 import type { CleanupReport, CleanupOpportunity } from "@/services/reportTypes.js";
 import { DEFAULT_BACKUP_WARNING } from "@/services/reportTypes.js";
 import { ReportService } from "@/services/reportService.js";
+import { viewReportAtPath } from "./cleanupReportView.js";
 import { getPlatformName } from "@/agent/tools/systemPaths.js";
 import { getModelId } from "@/agent/chatModel.js";
 
@@ -158,5 +159,7 @@ export async function runCleanupReport(context: BootstrapContext): Promise<void>
   const savedPath = reportService.saveReport(report);
   if (!aborted) {
     console.log(`\nReport saved: ${savedPath}`);
+    viewReportAtPath(configService, savedPath);
+    console.log("Report opened in browser. (Temp file will be removed when you exit.)");
   }
 }
