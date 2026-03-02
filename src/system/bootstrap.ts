@@ -6,20 +6,19 @@
 import { ConfigService } from "./configService.js";
 import { StateService } from "./stateService.js";
 import { ProviderService } from "@/services/providerService.js";
-import {
-  createAllowlistMiddleware,
-  type StreamDisplayCallbacks,
-} from "@/agent/allowlistMiddleware.js";
+import { createAllowlistMiddleware } from "@/agent/allowlistMiddleware.js";
 import { createAgent } from "@/agent/agent.js";
 import type { DiskCleanupAgent } from "@/agent/agent.js";
+import { createUserInputQueue } from "@/cli/userInputQueue.js";
+import type { UserInputQueue } from "@/cli/userInputQueue.js";
 
 export interface BootstrapContext {
   configService: ConfigService;
   stateService: StateService;
   providerService: ProviderService;
   agent: DiskCleanupAgent;
-  /** Set .current before running a stream that may ask for user input (e.g. cleanup report); clear after. */
-  streamDisplayCallbacksRef: { current: StreamDisplayCallbacks | null };
+  /** User input queue for the CLI coordinator; used during cleanup report and other flows that need prompts. */
+  userInputQueue: UserInputQueue;
 }
 
 export type RunAddProviderWorkflow = (providerService: ProviderService) => Promise<boolean>;
@@ -57,9 +56,9 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     }
   }
 
-  const streamDisplayCallbacksRef: { current: StreamDisplayCallbacks | null } = { current: null };
+  const userInputQueue = createUserInputQueue();
   const allowlistMiddleware = createAllowlistMiddleware(stateService, {
-    getStreamDisplayCallbacks: () => streamDisplayCallbacksRef.current,
+    requestUserInput: (options) => userInputQueue.requestInput(options),
   });
   const agent = createAgent({
     stateService,
@@ -75,6 +74,6 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapCon
     stateService,
     providerService,
     agent,
-    streamDisplayCallbacksRef,
+    userInputQueue,
   };
 }

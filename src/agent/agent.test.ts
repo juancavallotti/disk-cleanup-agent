@@ -24,7 +24,9 @@ describe("createAgent", () => {
     stateService = new StateService({ appName: "test", stateDir: tempDir });
     stateService.load();
     providerService = new ProviderService(configService);
-    allowlistMiddleware = createAllowlistMiddleware(stateService);
+    allowlistMiddleware = createAllowlistMiddleware(stateService, {
+      requestUserInput: () => Promise.resolve("y"),
+    });
   });
 
   it("getProvider returns first provider when none selected", () => {

@@ -1,9 +1,8 @@
 /**
  * Allowlist middleware: register allowed tools, persist allowlist and authorization status in state.
- * Tool authorization is human-in-the-loop: when a tool is about to run, prompt the user to allow or deny; persist the decision.
+ * Tool authorization is human-in-the-loop: when a tool is about to run, request user input via the CLI queue; persist the decision.
  */
 
-import input from "@inquirer/input";
 import type { StateService } from "@/system/stateService.js";
 import { TOOL_ALLOWLIST_KEY, TOOL_AUTHORIZATION_STATUS_KEY } from "@/system/types.js";
 
@@ -14,45 +13,40 @@ export interface AuthorizationRecord {
   timestamp: string;
 }
 
-export interface StreamDisplayCallbacks {
-  onBeforeUserInput(): void;
-  onAfterUserInput(): void;
+/** Options for requesting a single user input (used by the CLI coordinator to prompt). */
+export interface RequestInputOptions {
+  message: string;
+  validate?: (value: string) => true | string;
 }
 
 export interface AllowlistMiddlewareOptions {
-  /** Optional: custom prompt for human-in-the-loop; default prompts via inquirer. */
-  promptForAuthorization?: (toolName: string, args: unknown) => Promise<boolean>;
-  /** Optional: when set, called before showing the allow prompt (e.g. clear stream area) and after user answers (e.g. blank line before resuming stream). */
-  getStreamDisplayCallbacks?: () => StreamDisplayCallbacks | null;
+  /** Request user input; the CLI coordinator will fulfill this via the user input queue. */
+  requestUserInput: (options: RequestInputOptions) => Promise<string>;
 }
 
 export interface AllowlistMiddleware {
   registerAllowedTool(name: string): void;
   getAllowlist(): string[];
-  /** Human-in-the-loop: prompt user to allow/deny tool execution; persist to state; return true if allowed. */
+  /** Human-in-the-loop: request user allow/deny via queue; persist to state; return true if allowed. */
   requestToolAuthorization(toolName: string, args: unknown): Promise<boolean>;
   /** Filter tool names to only those on the allowlist. */
   filterToAllowlist(toolNames: string[]): string[];
 }
 
-function defaultPromptForAuthorization(toolName: string, args: unknown): Promise<boolean> {
-  const argsStr = typeof args === "object" && args !== null ? JSON.stringify(args) : String(args);
-  return input({
-    message: `Allow tool "${toolName}" with args: ${argsStr}? [y/n]`,
-    validate: (v) => {
-      const lower = v.trim().toLowerCase();
-      if (lower === "y" || lower === "n") return true;
-      return "Enter y or n";
-    },
-  }).then((v) => v.trim().toLowerCase() === "y");
-}
+const YN_VALIDATE = (v: string): true | string => {
+  const lower = v.trim().toLowerCase();
+  if (lower === "y" || lower === "n") return true;
+  return "Enter y or n";
+};
 
 export function createAllowlistMiddleware(
   stateService: StateService,
-  options: AllowlistMiddlewareOptions = {}
+  options: AllowlistMiddlewareOptions
 ): AllowlistMiddleware {
-  const promptForAuthorization = options.promptForAuthorization ?? defaultPromptForAuthorization;
-  const getStreamDisplayCallbacks = options.getStreamDisplayCallbacks;
+  const { requestUserInput } = options;
+
+  /** Serialize authorization prompts so only one is shown at a time. */
+  let authTail: Promise<boolean> = Promise.resolve(true);
 
   function getAllowlist(): string[] {
     const state = stateService.getState();
@@ -60,10 +54,26 @@ export function createAllowlistMiddleware(
     return Array.isArray(list) ? (list as string[]) : [];
   }
 
-  function getAuthorizationHistory(): AuthorizationRecord[] {
-    const state = stateService.getState();
-    const history = state[TOOL_AUTHORIZATION_STATUS_KEY];
-    return Array.isArray(history) ? (history as AuthorizationRecord[]) : [];
+  async function runOneAuthorization(toolName: string, args: unknown): Promise<boolean> {
+    const argsStr = typeof args === "object" && args !== null ? JSON.stringify(args) : String(args);
+    const answer = await requestUserInput({
+      message: `Allow tool "${toolName}" with args: ${argsStr}? [y/n]`,
+      validate: YN_VALIDATE,
+    });
+    const allowed = answer.trim().toLowerCase() === "y";
+    const record: AuthorizationRecord = {
+      toolName,
+      args,
+      allowed,
+      timestamp: new Date().toISOString(),
+    };
+    stateService.setState((state) => {
+      const history = Array.isArray(state[TOOL_AUTHORIZATION_STATUS_KEY])
+        ? (state[TOOL_AUTHORIZATION_STATUS_KEY] as AuthorizationRecord[])
+        : [];
+      state[TOOL_AUTHORIZATION_STATUS_KEY] = [...history, record];
+    });
+    return allowed;
   }
 
   return {
@@ -81,23 +91,10 @@ export function createAllowlistMiddleware(
     getAllowlist,
 
     async requestToolAuthorization(toolName: string, args: unknown): Promise<boolean> {
-      const callbacks = getStreamDisplayCallbacks?.() ?? null;
-      callbacks?.onBeforeUserInput();
-      const allowed = await promptForAuthorization(toolName, args);
-      callbacks?.onAfterUserInput();
-      const record: AuthorizationRecord = {
-        toolName,
-        args,
-        allowed,
-        timestamp: new Date().toISOString(),
-      };
-      stateService.setState((state) => {
-        const history = Array.isArray(state[TOOL_AUTHORIZATION_STATUS_KEY])
-          ? (state[TOOL_AUTHORIZATION_STATUS_KEY] as AuthorizationRecord[])
-          : [];
-        state[TOOL_AUTHORIZATION_STATUS_KEY] = [...history, record];
-      });
-      return allowed;
+      const previous = authTail;
+      const ourTurn = previous.then(() => runOneAuthorization(toolName, args));
+      authTail = ourTurn;
+      return ourTurn;
     },
 
     filterToAllowlist(toolNames: string[]): string[] {
