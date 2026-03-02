@@ -1,12 +1,45 @@
 /**
- * cleanup report view — list reports, inquirer if multiple, show backup warning and content (noop: path or YAML).
+ * cleanup report view — list reports, inquirer if multiple, render as HTML in temp, open in browser, schedule deletion on exit.
  */
 
 import select from "@inquirer/select";
+import { writeFileSync, existsSync, unlinkSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { execSync } from "node:child_process";
 import type { BootstrapContext } from "@/system/bootstrap.js";
 import { ReportService } from "@/services/reportService.js";
-import { readFileSync } from "node:fs";
-import { DEFAULT_BACKUP_WARNING } from "@/services/reportTypes.js";
+import { reportToHtml } from "@/services/reportToHtml.js";
+
+const TEMP_SUBDIR = "disk-cleanup";
+const tempPathsToDelete = new Set<string>();
+
+function registerTempForCleanup(filePath: string): void {
+  tempPathsToDelete.add(filePath);
+  if (tempPathsToDelete.size === 1) {
+    process.on("exit", () => {
+      for (const p of tempPathsToDelete) {
+        try {
+          if (existsSync(p)) unlinkSync(p);
+        } catch {
+          // ignore
+        }
+      }
+    });
+  }
+}
+
+function openInBrowser(filePath: string): void {
+  const platform = process.platform;
+  const quoted = `"${filePath.replace(/"/g, '\\"')}"`;
+  if (platform === "darwin") {
+    execSync(`open ${quoted}`);
+  } else if (platform === "linux") {
+    execSync(`xdg-open ${quoted}`);
+  } else if (platform === "win32") {
+    execSync(`start "" ${quoted}`);
+  }
+}
 
 export async function runCleanupReportView(context: BootstrapContext): Promise<void> {
   const { configService } = context;
@@ -35,14 +68,13 @@ export async function runCleanupReportView(context: BootstrapContext): Promise<v
     return;
   }
 
-  console.log("\n--- Backup warning ---");
-  console.log(report.backupWarning ?? DEFAULT_BACKUP_WARNING);
-  console.log("\n--- Report ---");
-  console.log("Path:", chosenPath);
-  console.log("Generated:", report.generatedAt);
-  console.log("System:", report.system);
-  console.log("Opportunities:", report.opportunities?.length ?? 0);
-  console.log("\n--- YAML content ---");
-  const raw = readFileSync(chosenPath, "utf-8");
-  console.log(raw);
+  const html = reportToHtml(report);
+  const tempDir = join(tmpdir(), TEMP_SUBDIR);
+  mkdirSync(tempDir, { recursive: true });
+  const id = report.generatedAt.replace(/[:.]/g, "-").replace(/Z$/, "Z");
+  const htmlPath = join(tempDir, `report-${id}.html`);
+  writeFileSync(htmlPath, html, "utf-8");
+  registerTempForCleanup(htmlPath);
+  openInBrowser(htmlPath);
+  console.log("Report opened in browser. (Temp file will be removed when you exit.)");
 }
