@@ -46,7 +46,7 @@ export function createChatModelFromProvider(provider: Provider): BaseChatModel {
       return new ChatOpenAI({
         model: modelId,
         ...(isGpt5 ? {} : { temperature: 0.7 }),
-        openAIApiKey: apiKey,
+        apiKey,
       });
     }
     case "anthropic": {
